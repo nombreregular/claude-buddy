@@ -2,6 +2,8 @@
 
 **English** | [Español](README.es.md)
 
+> Unofficial project, not affiliated with or endorsed by Anthropic. "Claude" is a trademark of Anthropic.
+
 A touchscreen companion for Claude desktop, built on a Raspberry Pi 4 and a 7" display.
 
 It shows up in Claude desktop as a **Hardware Buddy** over Bluetooth LE. When Claude asks for permission to run a tool, the request appears on the screen and you **approve or deny it with a tap**. At a glance you also see what your Claude sessions and background runs are doing, and a small pet (Mochi) reacts to it all.

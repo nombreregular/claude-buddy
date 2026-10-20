@@ -2,6 +2,8 @@
 
 [English](README.md) | **Español**
 
+> Proyecto no oficial, sin relación con Anthropic ni aprobado por ella. "Claude" es una marca de Anthropic.
+
 Un compañero con pantalla táctil para Claude desktop, hecho con una Raspberry Pi 4 y una pantalla de 7".
 
 Aparece en Claude desktop como un **Hardware Buddy** por Bluetooth LE. Cuando Claude pide permiso para usar una herramienta, el pedido sale en la pantalla y lo **aprobás o denegás con un toque**. De un vistazo también ves qué hacen tus sesiones de Claude y tus corridas en segundo plano, y una mascota (Mochi) reacciona a todo eso.
