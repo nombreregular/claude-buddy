@@ -183,7 +183,7 @@ La pantalla viene en español e inglés: `--lang es|en` (la terminal y el regist
 
 ## Configuración
 
-Comandos: `buddy.py` (correr), `buddy.py check` (diagnóstico y ensayo de registro en BlueZ), `buddy.py forget-all` (borrar los emparejamientos hechos con el buddy; los dispositivos que nunca hablaron con él, como un teclado Bluetooth, no se tocan).
+Comandos: `buddy.py` (correr), `buddy.py demo [--lang en]` (la pantalla real con una historia inventada, para videos y capturas: no lee ni manda nada a Claude y los permisos se responden tocando), `buddy.py check` (diagnóstico y ensayo de registro en BlueZ), `buddy.py forget-all` (borrar los emparejamientos hechos con el buddy; los dispositivos que nunca hablaron con él, como un teclado Bluetooth, no se tocan).
 
 | Opción | Para qué |
 |---|---|
@@ -247,7 +247,8 @@ Todo está probado contra un BlueZ simulado (unas 2.000 pruebas; las de BlueZ ne
 
 | Ruta | Qué es |
 |---|---|
-| `buddy.py` | Arranque, terminal, teclas, `check`, `forget-all` |
+| `buddy.py` | Arranque, terminal, teclas, `check`, `forget-all`, `demo` |
+| `buddy_demo.py` | Modo demo: el hub y la página reales con una historia guionada y datos inventados |
 | `buddy_core.py` | El protocolo (solo librería estándar): JSON por líneas, latidos, aprobaciones, estado, transferencia de personajes, el tablero de hilos |
 | `buddy_bluez.py` | Bluetooth sobre la API D-Bus de BlueZ: servidor GATT (Nordic UART), anuncio, agente de passkey |
 | `buddy_ui.py` | La pantalla: modelo de vista más el servidor HTTP local y la base HTTP compartida |

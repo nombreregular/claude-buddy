@@ -581,8 +581,8 @@ def parse_args(argv=None) -> argparse.Namespace:
         prog="buddy.py",
         description="Claude Buddy para Raspberry Pi (protocolo Hardware Buddy de Claude desktop).",
     )
-    parser.add_argument("command", nargs="?", default="run", choices=["run", "check", "forget-all"],
-                        help="run (default), check (diagnóstico) o forget-all (borrar emparejamientos)")
+    parser.add_argument("command", nargs="?", default="run", choices=["run", "check", "forget-all", "demo"],
+                        help="run (default), check (diagnóstico), forget-all (borrar emparejamientos) o demo (la pantalla con datos inventados, para video)")
     parser.add_argument("--state-dir", type=Path, default=default_state_dir(), help="dónde guardar estado y personajes")
     parser.add_argument("--adapter", default="hci0", help="adaptador Bluetooth (default hci0)")
     parser.add_argument("--adv-mode", choices=["name", "kernel"], default="name",
@@ -656,7 +656,11 @@ def main(argv=None) -> int:
             sys.exit(f"No puedo escribir el log en {args.log_file}: {exc}")
     logging.basicConfig(level=level, handlers=handlers, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     logging.getLogger("buddy").info("buddy %s, python %s, %s", __version__, sys.version.split()[0], sys.platform)
-    runner = {"run": run_daemon, "check": run_check, "forget-all": run_forget_all}[args.command]
+    if args.command == "demo":
+        from buddy_demo import run_demo
+        runner = run_demo
+    else:
+        runner = {"run": run_daemon, "check": run_check, "forget-all": run_forget_all}[args.command]
     try:
         return asyncio.run(runner(args))
     except TransportError as exc:

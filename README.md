@@ -183,7 +183,7 @@ The screen comes in Spanish and English: `--lang es|en` (the terminal and the lo
 
 ## Configuration
 
-Commands: `buddy.py` (run), `buddy.py check` (diagnosis and a registration rehearsal with BlueZ), `buddy.py forget-all` (delete the pairings made with the buddy; devices that never talked to it, such as a Bluetooth keyboard, are not touched).
+Commands: `buddy.py` (run), `buddy.py demo [--lang en]` (the real screen with an invented story, for videos and screenshots: nothing is read from or sent to Claude, and tapping a permission works), `buddy.py check` (diagnosis and a registration rehearsal with BlueZ), `buddy.py forget-all` (delete the pairings made with the buddy; devices that never talked to it, such as a Bluetooth keyboard, are not touched).
 
 | Option | What it does |
 |---|---|
@@ -249,7 +249,8 @@ Everything is tested against a simulated BlueZ (about 2,000 tests; the BlueZ one
 
 | Path | What it is |
 |---|---|
-| `buddy.py` | Entry point: terminal, keys, `check`, `forget-all` |
+| `buddy.py` | Entry point: terminal, keys, `check`, `forget-all`, `demo` |
+| `buddy_demo.py` | Demo mode: the real hub and page driven through a scripted story with invented data |
 | `buddy_core.py` | The protocol (standard library only): line-based JSON, heartbeats, approvals, state, character transfer, the thread board |
 | `buddy_bluez.py` | Bluetooth over BlueZ's D-Bus API: GATT server (Nordic UART), advertisement, passkey agent |
 | `buddy_ui.py` | The screen: view model plus the local HTTP server and the shared HTTP base |
