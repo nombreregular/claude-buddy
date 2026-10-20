@@ -1,0 +1,33 @@
+{
+  "name": "buddy",
+  "render": "pixel",
+  "colors": {
+    "body": "#FF9E7A",
+    "bg": "#0E0D14",
+    "text": "#F3EEF7",
+    "textDim": "#9A93A4",
+    "ink": "#1B1626"
+  },
+  "accents": {
+    "sleep": "#A78BFA",
+    "idle": "#FF9E7A",
+    "busy": "#4FD1C5",
+    "attention": "#FFCF5C",
+    "celebrate": "#8BE76A",
+    "dizzy": "#A9B8CF",
+    "heart": "#FF8FA3"
+  },
+  "states": {
+    "sleep": "sleep.gif",
+    "idle": [
+      "idle_0.gif",
+      "idle_1.gif",
+      "idle_2.gif"
+    ],
+    "busy": "busy.gif",
+    "attention": "attention.gif",
+    "celebrate": "celebrate.gif",
+    "dizzy": "dizzy.gif",
+    "heart": "heart.gif"
+  }
+}

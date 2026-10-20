@@ -1,0 +1,27 @@
+# Servicio de USUARIO: arranca el buddy (Bluetooth + pantalla táctil) sin teclado.
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp claude-buddy.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now claude-buddy
+#   sudo loginctl enable-linger "$USER"      # para que arranque con el Pi aunque nadie inicie sesión
+#
+# Logs:  journalctl --user-unit claude-buddy -f
+#        (en Pi OS Trixie `journalctl --user -u claude-buddy` dice "No journal files were found"; --user-unit sí sirve)
+# Restart=always: si el daemon muere o alguien lo mata, vuelve a los 5 s. Para correr buddy.py a mano
+# (por ejemplo con -vv --log-file), antes: systemctl --user stop claude-buddy; al terminar: start.
+# Si el buddy necesita sudo para hablar con BlueZ, mirá la versión de sistema en el README.
+
+[Unit]
+Description=Claude Buddy (Bluetooth y pantalla táctil)
+
+[Service]
+WorkingDirectory=%h/claude-buddy
+# Con Hermes (fase 5): agregá --hermes-bind <IP de Tailscale del Pi> --hermes-token-file %h/.config/claude-buddy/hermes.token
+# (por ejemplo --hermes-bind <tailscale-ip>). Nunca 0.0.0.0 en uso normal: eso abre el listener a toda la LAN.
+ExecStart=%h/claude-buddy/.venv/bin/python %h/claude-buddy/buddy.py --no-keys
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

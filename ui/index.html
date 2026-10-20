@@ -1,0 +1,2184 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="buddy-token" content="__BUDDY_TOKEN__">
+<meta name="buddy-lang" content="__BUDDY_LANG__">
+<title>Buddy</title>
+<style>
+/* Pantalla del buddy: 800x480, táctil. Sin dependencias, sin fuentes externas: solo las que trae el Pi
+   (Nunito Sans). El mundo: un cuarto casi a oscuras y Buddy, un cuerpo blando de luz cuyo color es su ánimo.
+   Lo que hace Claude lo dice Buddy en una burbuja; lo demás son píldoras redondas.
+   Solo se animan transform y opacity (la Pi 4 lo agradece). */
+:root{
+  --ground:#0E0D14;
+  --paper:#F7F2EA; --ink:#1B1626; --ink-2:#6E6679;
+  --bone:#F3EEF7; --bone-2:rgba(243,238,247,.72); --bone-3:rgba(243,238,247,.5);
+  /* el color de cada ánimo */
+  --sleep:#A78BFA; --idle:#FF9E7A; --busy:#4FD1C5; --attn:#FFCF5C; --celebrate:#8BE76A; --dizzy:#A9B8CF; --heart:#FF8FA3;
+  --ok:#7CE38B; --no:#FF6B6B; --ask:var(--attn);
+  --accent:var(--sleep);
+  --accent-real:var(--sleep);
+  --sans:"Nunito Sans","URW Gothic","Avenir Next","Trebuchet MS",sans-serif;
+  --mono:"DejaVu Sans Mono","Noto Sans Mono","SF Mono",Menlo,monospace;
+}
+body[data-mood=sleep]{--accent:var(--sleep)}
+body[data-mood=idle]{--accent:var(--idle)}
+body[data-mood=busy]{--accent:var(--busy)}
+body[data-mood=attention]{--accent:var(--attn)}
+body[data-mood=celebrate]{--accent:var(--celebrate)}
+body[data-mood=dizzy]{--accent:var(--dizzy)}
+body[data-mood=heart]{--accent:var(--heart)}
+/* `--accent` es el ánimo con que Buddy se ve (el de un toque, si hay uno); `--accent-real` es el que dice el servidor (`data-real`).
+   Buddy, su resplandor y el eco de un toque siguen al primero. Todo lo que cuenta algo (la barra, la placa y las pantallas) se tiñe del
+   segundo, para que un corazón de 2,5 s no pinte de rosa una píldora que dice "Trabajando". */
+body[data-real=sleep]{--accent-real:var(--sleep)}
+body[data-real=idle]{--accent-real:var(--idle)}
+body[data-real=busy]{--accent-real:var(--busy)}
+body[data-real=attention]{--accent-real:var(--attn)}
+body[data-real=celebrate]{--accent-real:var(--celebrate)}
+body[data-real=dizzy]{--accent-real:var(--dizzy)}
+body[data-real=heart]{--accent-real:var(--heart)}
+.bar,#plate,main{--accent:var(--accent-real)}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--ground);color:var(--bone);font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+body.kiosk,body.kiosk *{cursor:none!important}
+::selection{background:var(--accent);color:var(--ink)}
+button{font:inherit;color:inherit;outline:none;border:0;background:none}
+button:focus-visible{outline:3px solid var(--bone);outline-offset:4px}
+svg{display:block}
+b{font-weight:800}
+
+#stage{position:absolute;left:50%;top:50%;width:800px;height:480px;margin:-240px 0 0 -400px;
+  transform:scale(var(--s,1));transform-origin:50% 50%;overflow:hidden;background:var(--ground)}
+
+/* la luz de Buddy tiñe el cuarto */
+#glow{position:absolute;left:-140px;top:-70px;width:620px;height:620px;border-radius:50%;
+  background:radial-gradient(closest-side,var(--accent) 0%,rgba(14,13,20,0) 72%);opacity:.2;animation:aura 6s ease-in-out infinite}
+body[data-mood=attention] #glow{animation-duration:1.4s;opacity:.3}
+body[data-mood=sleep] #glow{opacity:.12}
+body[data-screen=ask] #glow{opacity:.18}
+@keyframes aura{0%,100%{opacity:.16}50%{opacity:.26}}
+
+/* ---------- píldoras y burbujas: las dos piezas del mundo ---------- */
+.pill{display:inline-flex;align-items:baseline;gap:7px;padding:9px 16px;border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 16%,rgba(255,255,255,.04));font-size:16px;font-weight:700;color:var(--bone-2);white-space:nowrap}
+.pill b{font-size:24px;line-height:1;color:var(--bone);font-variant-numeric:tabular-nums}
+.pill.hot{background:var(--ask);color:rgba(27,22,38,.72)}
+.pill.hot b{color:var(--ink)}
+.pill.sm{padding:6px 12px;font-size:14px}
+.pill.sm b{font-size:18px}
+.bubble{position:relative;background:var(--paper);color:var(--ink);border-radius:28px;padding:20px 24px 18px}
+.bubble::before{content:"";position:absolute;left:-9px;top:40px;width:26px;height:26px;background:var(--paper);border-radius:5px;transform:rotate(45deg)}
+
+/* ---------- barra de arriba ---------- */
+.bar{position:absolute;left:0;top:0;right:0;height:56px;display:flex;align-items:center;padding:0 24px 0 20px;z-index:2}
+.net{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--accent) 16%,rgba(255,255,255,.04));
+  font-size:15px;font-weight:700;color:var(--bone-2)}
+.net .ic{width:16px;height:16px;flex:none}
+.net[data-state=down]{color:var(--no)}
+.net[data-state=linked]{color:var(--bone)}
+.net .open{font-size:13px;color:var(--ask)}
+#clock{margin-left:auto;font-size:30px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--bone)}
+body[data-screen=boot] #net,body[data-screen=boot] #clock{visibility:hidden}
+
+/* ---------- pantallas ---------- */
+.screen{position:absolute;left:0;right:0;top:56px;bottom:0;display:none}
+body[data-screen=boot] #s-boot,body[data-screen=main] #s-main,body[data-screen=wait] #s-wait,
+body[data-screen=down] #s-down,body[data-screen=pair] #s-pair,body[data-screen=ask] #s-ask{display:block}
+h1{font-size:30px;line-height:1.08;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+.note{font-size:18px;line-height:1.35;font-weight:600;color:var(--ink-2)}
+
+/* la columna de la derecha: lo que Buddy cuenta */
+.col{position:absolute;left:344px;right:24px;top:6px;bottom:22px;display:flex;flex-direction:column;gap:14px}
+.col .bubble{display:flex;flex-direction:column;gap:12px}
+.steps{list-style:none;display:flex;flex-direction:column;gap:12px;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:12px;align-items:flex-start;font-size:19px;line-height:1.3;font-weight:600;color:var(--ink)}
+.steps li::before{content:counter(s);flex:none;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;margin-top:-2px}
+.chip{display:inline-block;font-weight:800;background:rgba(27,22,38,.08);border-radius:8px;padding:0 8px}
+.reason{font-size:17px;line-height:1.4;font-weight:600;color:var(--ink);background:rgba(255,107,107,.14);border-radius:16px;padding:12px 14px;
+  max-height:150px;overflow-y:auto;touch-action:pan-y;white-space:pre-wrap;word-break:break-word}
+
+/* conectado */
+/* altura fija: el mensaje del Mac cambia cada pocos segundos y nada de abajo debe moverse con él */
+#feed{height:284px;overflow:hidden}
+#feed-msg{font-size:30px;line-height:1.1;font-weight:800;letter-spacing:-.01em;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+#feed-list{list-style:none;display:flex;flex-direction:column;gap:3px}
+#feed-list li{font-size:17px;line-height:1.3;font-weight:600;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#feed-empty{font-size:28px;line-height:1.1;font-weight:800;letter-spacing:-.01em}
+#feed-detail{font-size:18px;line-height:1.35;font-weight:600;color:var(--ink-2)}
+/* un hilo vivo por fila: una conversación de Claude (la real, con su título), en una cápsula de 44px que se toca
+   para leer qué dijo. Trabajando = cápsula con el acento del ánimo (22% sobre papel; el 16% es de las píldoras sobre
+   el cuarto); terminó y espera tu respuesta = cápsula neutra de tinta al 7%. Nada se atenúa con opacidad: el texto de
+   un hilo terminado es justo el que se va a leer. El texto secundario va en tinta al 78% (contraste 6.8 a 8.2).
+   Los hilos se agrupan como en la barra lateral de Claude desktop: el nombre del grupo es un rótulo chico, en
+   minúsculas y mayúsculas normales, sin línea ni letras espaciadas, sobre las filas de su grupo; un hilo que otro
+   lanzó cuelga sangrado debajo de su padre. */
+#feed-list.tasks{gap:10px;max-height:219px;margin:0 -20px -18px 0;padding:0 4px 18px 0;overflow-y:auto;scrollbar-gutter:stable;touch-action:pan-y;overscroll-behavior:contain;-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 16px),transparent)}
+/* la barra mide 16px (era 6) para que un dedo la agarre: la raya que se ve son 12px de pulgar con 2px de borde transparente a cada lado */
+#feed-list.tasks::-webkit-scrollbar{width:16px}
+#feed-list.tasks::-webkit-scrollbar-track{background:rgba(27,22,38,.06);border-radius:8px}
+#feed-list.tasks::-webkit-scrollbar-thumb{background:rgba(27,22,38,.25);background-clip:padding-box;border:2px solid transparent;border-radius:8px;min-height:56px}
+body.pack #feed-list.tasks::-webkit-scrollbar-track{background:color-mix(in srgb,var(--bone) 8%,transparent)}
+body.pack #feed-list.tasks::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--bone) 30%,transparent);background-clip:padding-box}
+#feed-list.tasks>li{flex:none}
+#feed-list li.task{display:block;overflow:visible}
+#feed-list li.task.kid{margin-left:18px}
+#feed-list li.grp{margin:0 0 -6px 18px;font-size:14px;line-height:16px;font-weight:700;color:var(--ink-2)}
+.trow{display:flex;align-items:center;gap:8px;width:100%;height:44px;padding:0 14px 0 18px;border-radius:999px;text-align:left;
+  background:color-mix(in srgb,var(--accent) 22%,transparent);font-size:17px;line-height:1.2;font-weight:600;
+  color:color-mix(in srgb,var(--ink) 78%,var(--paper));transition:transform .08s}
+li.task.idle .trow{background:color-mix(in srgb,var(--ink) 7%,transparent)}
+.trow:active{transform:scale(.98)}
+.trow b{flex:none;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800;color:var(--ink)}
+.trow span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow i{flex:none;font-style:normal;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.trow svg{flex:none;width:14px;height:14px}
+/* terminó y espera tu respuesta: además del tinte, una marca que no depende del color (con título la fila no dice "terminó") */
+.trow .ck{display:none;color:var(--ink)}
+li.task.idle .trow .ck{display:block}
+/* con título, la fila es el título: qué herramienta usa va en el detalle (en una fila caben unas 30 letras) */
+li.task.titled .trow b{flex:1;max-width:none}
+li.task.titled .trow span{display:none}
+/* una corrida (un claude -p o un trabajo que ve el censo de la Mac) no es una conversación: no hay título que tape qué hace y la marca
+   de la derecha es cuánto lleva corriendo (h:mm:ss), no cuándo habló. Callada = lleva rato sin escribir nada: ese aviso gana sobre lo
+   que hacía, va en tinta plena y se lee entero (el nombre es el que cede, con puntos suspensivos). */
+li.task.quiet .trow span{flex:none;font-weight:700;color:var(--ink)}
+li.task.quiet .trow b{flex:0 1 auto;min-width:0}
+/* la última línea de la lista: cuántas filas más hay de las que caben. No se toca: no es un hilo */
+#feed-list li.more{margin-left:18px;font-size:14px;line-height:16px;font-weight:700;color:var(--ink-2)}
+/* un aviso de Hermes: una fila como las de los hilos (44px), con una campana delante y, a la derecha, hace cuánto llegó. El tinte dice de qué
+   clase es: info = el acento, como un hilo que trabaja; ok = verde; warn = ámbar. El acento cambia con el ánimo (en "te necesita" es el mismo
+   ámbar), así que ok y warn llevan además una marca antes de la edad, como la marca de visto de un hilo que terminó: el color nunca va solo. */
+#feed-list li.notice{display:block;overflow:visible}
+li.notice .trow b{flex:1;max-width:none;min-width:0}
+.trow .bell{width:18px;height:18px}
+.trow .wn{display:none;color:var(--ink)}
+li.notice.ok .trow{background:color-mix(in srgb,var(--ok) 34%,transparent)}
+li.notice.warn .trow{background:color-mix(in srgb,var(--ask) 38%,transparent)}
+li.notice.ok .trow .ck,li.notice.warn .trow .wn{display:block}
+/* con un pack la burbuja es oscura: el verde y el ámbar bajan al 22% del acento y el texto de la fila va en tinta plena, para que se lea */
+body.pack li.notice .trow{color:var(--ink)}
+body.pack li.notice.ok .trow{background:color-mix(in srgb,var(--ok) 22%,transparent)}
+body.pack li.notice.warn .trow{background:color-mix(in srgb,var(--ask) 22%,transparent)}
+/* el detalle ocupa el lugar de la lista dentro de la misma burbuja: mismo alto, misma cola, nada de abajo se mueve */
+#feed.reading>*{display:none}
+#feed.reading>#task-view{display:flex}
+#task-view{display:none;flex-direction:column;gap:8px;min-height:0;height:100%}
+.tv-head{display:flex;align-items:center;gap:12px;height:44px;flex:none}
+.tv-name{flex:1;min-width:0;height:32px;font-size:30px;line-height:1.08;font-weight:800;letter-spacing:-.01em;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* un título largo no cabe en 30px: baja a 21px y se deja leer en dos líneas (como .tool.long) */
+#task-view.long .tv-name{height:44px;font-size:21px;line-height:22px;white-space:normal;word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tv-sub{display:flex;gap:8px;flex:none;margin-top:-5px;height:18px;font-size:15px;line-height:18px;font-weight:700;color:var(--ink-2)}
+#task-view.long .tv-sub{margin-top:-2px}
+.tv-ag{flex:none;font-variant-numeric:tabular-nums}
+.tv-ag::after{content:"\00B7";margin-left:8px}
+.tv-dd{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-back{flex:none;display:flex;align-items:center;gap:6px;height:44px;padding:0 20px 0 14px;border-radius:999px;
+  background:color-mix(in srgb,var(--accent) 30%,transparent);font-size:16px;font-weight:800;color:var(--ink);transition:transform .08s}
+.tv-back:active{transform:scale(.97)}
+.tv-back svg{width:16px;height:16px;flex:none}
+#tv-said{flex:1;min-height:0;margin:0 -20px -18px 0;padding:0 4px 18px 0;scrollbar-gutter:stable;overflow-y:auto;touch-action:pan-y;overscroll-behavior:contain;
+  font-size:18px;line-height:1.35;font-weight:600;color:var(--ink);white-space:pre-line;word-break:break-word}
+#tv-said::-webkit-scrollbar{width:16px}
+#tv-said::-webkit-scrollbar-track{background:rgba(27,22,38,.06);border-radius:8px}
+#tv-said::-webkit-scrollbar-thumb{background:rgba(27,22,38,.25);background-clip:padding-box;border:2px solid transparent;border-radius:8px;min-height:56px}
+body.pack #tv-said::-webkit-scrollbar-track{background:color-mix(in srgb,var(--bone) 8%,transparent)}
+body.pack #tv-said::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--bone) 30%,transparent);background-clip:padding-box}
+#tv-pre{font-size:14px;font-weight:800;color:var(--ink-2)}
+#tv-text::before{content:"\201C"}
+#tv-text::after{content:"\201D"}
+#tv-said.none{color:var(--ink-2)}
+#tv-said.none #tv-text::before,#tv-said.none #tv-text::after{content:""}
+/* el detalle de un aviso es este mismo #task-view: el título, "Aviso · de <quién> · hace <cuánto>", el cuerpo sin comillas y, a la izquierda de Volver,
+   Listo (lo quita del todo). Volver es el último de la cabecera y queda donde está en el detalle de un hilo: un dedo que va a su lugar de siempre nunca
+   da con Listo, que no se puede deshacer. Con dos botones el título tiene unos 170px: baja a 21px como un título largo y, si en dos líneas no cabe, a 19px y la
+   cabecera crece hasta cinco líneas (un aviso tiene un título de hasta 60 letras y ninguna se corta). Los dos botones quedan arriba a la derecha. */
+.tv-na{display:none;flex:none;font-variant-numeric:tabular-nums}
+.tv-na::before{content:"\00B7";margin-right:8px}
+.tv-done{display:none;flex:none;align-items:center;gap:6px;height:44px;padding:0 18px 0 14px;border-radius:999px;background:var(--ok);
+  font-size:16px;font-weight:800;color:#1B1626;transition:transform .08s}
+.tv-done:active{transform:scale(.97)}
+.tv-done svg{width:16px;height:16px;flex:none}
+#task-view.notice .tv-head{gap:8px}
+#task-view.notice .tv-done{display:flex}
+#task-view.notice .tv-na{display:block}
+#task-view.notice .tv-dd{flex:0 1 auto}
+#task-view.notice #tv-text::before,#task-view.notice #tv-text::after{content:""}
+#task-view.notice.tall .tv-head{height:auto;min-height:44px;align-items:flex-start}
+#task-view.notice.tall .tv-name{height:auto;max-height:100px;font-size:19px;line-height:20px;-webkit-line-clamp:5}
+.pills{display:flex;gap:10px;flex-wrap:wrap}
+.foot{margin-top:auto;display:flex;gap:10px;flex-wrap:wrap}
+
+/* la placa de Buddy, a sus pies */
+#plate{position:absolute;left:20px;width:300px;top:370px;display:none;flex-direction:column;align-items:center;gap:9px;z-index:2}
+body[data-screen=main] #plate,body[data-screen=wait] #plate,body[data-screen=down] #plate,body[data-screen=boot] #plate,body[data-screen=pair] #plate{display:flex}
+.pl-name{display:flex;gap:6px;font-size:14px;font-weight:700;color:var(--bone-2);white-space:nowrap;max-width:300px;overflow:hidden}
+.pl-name b{color:var(--bone)}
+#mood{padding:8px 18px;border-radius:999px;background:var(--accent);color:var(--ink);font-size:18px;font-weight:800;white-space:nowrap}
+.pl-lvl{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:var(--bone-2)}
+.xptrack{position:relative;width:120px;height:8px;border-radius:4px;background:color-mix(in srgb,var(--accent) 22%,rgba(255,255,255,.04));overflow:hidden}
+#xp{position:absolute;left:0;top:0;display:block;width:100%;height:100%;border-radius:4px;background:var(--accent);transform-origin:0 50%;transform:scaleX(0);
+  transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+
+/* emparejar */
+.card{flex:1;display:flex;align-items:center;justify-content:center;border-radius:28px;background:color-mix(in srgb,var(--accent) 12%,rgba(255,255,255,.04))}
+#digits{display:flex;align-items:center;gap:6px}
+.digit{width:56px;height:94px;display:flex;align-items:center;justify-content:center;border-radius:16px;background:rgba(255,255,255,.06);
+  font-size:70px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;color:var(--bone)}
+.digit.done{background:var(--ok);color:var(--ink)}
+.digits-gap{width:14px}
+#pair-sub{font-size:15px;font-weight:800;color:#1F7A44;min-height:18px}
+
+/* pedido de permiso */
+.what{position:absolute;left:24px;width:296px;top:10px;display:flex;flex-direction:column;gap:6px}
+.tool{font-size:44px;line-height:1;font-weight:800;letter-spacing:-.02em;color:var(--bone);word-break:break-word;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tool.long{font-size:30px;line-height:1.05}
+.age{font-size:15px;font-weight:700;color:var(--bone-2);font-variant-numeric:tabular-nums}
+.what #queue{align-self:flex-start;margin-top:6px}
+/* una pregunta con opciones solo se contesta en la Mac: acá se avisa y no hay botones que la descarten */
+#ask-note{display:none;font-size:18px;line-height:1.3;font-weight:700;color:var(--bone)}
+.question #ask-note{display:block}
+.question .btns{display:none}
+.hint.ctx{font-family:var(--sans);font-size:19px;line-height:1.4;font-weight:600;color:var(--ink-2)}
+/* la pista es Buddy hablando: la burbuja lleva la cola y adentro el texto hace scroll */
+.hint-wrap{position:absolute;left:344px;right:24px;top:6px;height:280px;padding:0}
+.hint-wrap::before{top:150px}
+.hint{height:100%;padding:16px 20px;border-radius:28px;font-family:var(--mono);font-size:21px;line-height:1.36;font-weight:400;
+  white-space:pre-wrap;word-break:break-word;overflow-y:auto;touch-action:pan-y}
+.hint.long{font-size:17px;line-height:1.4}
+.hint.empty{font-family:var(--sans);font-size:22px;font-weight:700;color:var(--ink-2)}
+.hint::-webkit-scrollbar{width:6px}
+.hint::-webkit-scrollbar-thumb{background:rgba(27,22,38,.25);border-radius:3px}
+.btns{position:absolute;left:24px;right:24px;bottom:22px;height:116px;display:flex;gap:24px}
+.btn{position:relative;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:14px;padding:0 16px;border-radius:999px;
+  font-size:30px;font-weight:800;white-space:nowrap;transition:opacity .2s,transform .08s}
+.btn svg{width:32px;height:32px;flex:none}
+.btn.no{color:var(--bone);box-shadow:inset 0 0 0 3px var(--no)}
+.btn.no svg{color:var(--no)}
+.btn.ok{background:var(--ok);color:var(--ink);box-shadow:0 12px 44px rgba(124,227,139,.28)}
+/* "Siempre" solo existe cuando el pedido trae una regla (Claude Code en terminal): aro verde, la regla se lee arriba */
+.btn.always{display:none;color:var(--bone);box-shadow:inset 0 0 0 3px var(--ok)}
+.btn.always svg{color:var(--ok)}
+.btns.three .btn.always{display:flex}
+.btns.three .btn{font-size:26px;gap:10px;padding:0 12px}
+.btns.three .btn.ok{flex:1.35}
+#always-note{position:absolute;left:356px;right:36px;top:248px;font-size:16px;line-height:1.3;font-weight:700;color:var(--bone-2);word-break:break-word}
+#s-ask.always .hint-wrap{height:232px}
+#always-note b{color:var(--bone);font-weight:800}
+/* la barra de armado: el botón decide recién cuando llega al final (600 ms) */
+.btn::after{content:"";position:absolute;left:28px;right:28px;bottom:14px;height:3px;border-radius:2px;background:currentColor;opacity:0;transform:scaleX(0);transform-origin:0 50%}
+.btns.hold .btn::after{opacity:.8;animation:arm .6s linear both}
+.btn:active{transform:scale(.97)}
+.btns.hold .btn{opacity:.45}
+.btns.busy .btn:not(.chosen){opacity:.22}
+
+/* avisos */
+.flash,#offline{position:absolute;left:0;top:0;right:0;bottom:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:22px;background:rgba(14,13,20,.94);z-index:30}
+.flash.on,#offline.on{display:flex}
+.flash .ring{width:150px;height:150px;border-radius:50%;border:4px solid;display:flex;align-items:center;justify-content:center}
+.flash.on .ring{animation:popin .45s cubic-bezier(.3,1.4,.5,1) both}
+.flash .ring svg{width:70px;height:70px}
+.flash .ring .x,.flash.ok .ring .x{display:none}
+.flash.no .ring .c{display:none}
+.flash.no .ring .x{display:block}
+.flash.ok{color:var(--ok)}
+.flash.no{color:var(--no)}
+.flash .t{padding:12px 28px;border-radius:999px;font-size:30px;font-weight:800;color:var(--ink)}
+.flash.ok .t{background:var(--ok)}
+.flash.no .t{background:var(--no)}
+#offline{z-index:40;font-size:28px;font-weight:800;color:var(--bone);text-align:center;padding:0 60px}
+#offline small{display:block;margin-top:12px;font-size:16px;font-weight:700;color:var(--bone-2)}
+#toast{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);max-width:700px;padding:12px 24px;border-radius:999px;
+  background:var(--paper);color:var(--ink);font-size:19px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;white-space:nowrap}
+#toast.on{opacity:1}
+#demo-tag{position:absolute;right:10px;bottom:6px;font-size:12px;font-weight:700;color:var(--bone-3);z-index:60}
+
+/* ---------- personaje GIF: el pack que manda Claude desktop (fase 4) ----------
+   Con un pack, Buddy es ese GIF y la pantalla toma los colores de su manifest (bg, text, textDim, body),
+   como el firmware oficial. Sin pack, se dibuja el Buddy propio de abajo. */
+/* Buddy tiene un solo tamaño y un solo lugar en todas las pantallas: 192px (2x del sprite de 96, píxeles parejos),
+   justo encima de los botones del permiso. Antes se achicaba a la mitad con cada pedido y saltaba. */
+#gif{position:absolute;left:74px;top:144px;width:192px;height:192px;display:none;align-items:flex-end;justify-content:center;z-index:2;transform-origin:50% 100%}
+body.pack #gif{display:flex}
+/* html delante: le gana a body[data-screen=…] #pet{display:block}, que tiene la misma especificidad y viene después */
+html body.pack #pet,html body.pack #glow{display:none}
+#gif img{display:none;width:192px;height:auto;max-height:192px}
+#gif img.on{display:block}
+body.pixel #gif img{image-rendering:pixelated}
+body.pack{--paper:color-mix(in srgb,var(--bone) 9%,var(--ground));--ink:var(--bone);--ink-2:var(--bone-2)}
+body.pack #mood,body.pack .steps li::before,body.pack .digit.done{color:var(--ground)}
+body.pack .pill.hot{color:color-mix(in srgb,var(--ground) 72%,transparent)}
+body.pack .pill.hot b{color:var(--ground)}
+body.pack .btn.ok,body.pack .flash .t{color:#141414}
+body.pack .chip{background:color-mix(in srgb,var(--bone) 14%,transparent)}
+body.pack .hint::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--bone) 30%,transparent)}
+body.pack #pair-sub{color:var(--ok)}
+
+/* ---------- Buddy ---------- */
+#pet{position:absolute;left:74px;top:140px;width:300px;height:310px;display:none;transform-origin:0 0;transform:scale(.64);z-index:2}
+body[data-screen=boot] #pet,body[data-screen=main] #pet,body[data-screen=wait] #pet,body[data-screen=down] #pet,body[data-screen=pair] #pet,body[data-screen=ask] #pet{display:block}
+#pet svg{width:300px;height:310px;overflow:visible;transform-origin:50% 91%}
+#pet .v{display:none}
+#pet .aura-c{stop-color:var(--accent)}
+#pet .ring1,#pet .ring2{fill:none;stroke:var(--accent)}
+#pet .ring1{stroke-width:12;opacity:.14}
+#pet .ring2{stroke-width:8;opacity:.07}
+#pet .shadow{fill:#000;opacity:.45}
+#pet .gloss{fill:#fff;opacity:.42}
+#pet .gloss2{fill:#fff;opacity:.55}
+#pet .glint{fill:#fff;opacity:.85}
+#pet .rim{fill:none;stroke:#fff;stroke-width:4;stroke-linecap:round;opacity:.3}
+#pet .rim2{fill:none;stroke:#fff;stroke-width:5;stroke-linecap:round;opacity:.16}
+#pet .noodle{fill:none;stroke:var(--accent);stroke-width:17;stroke-linecap:round}
+#pet .stem{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round}
+#pet .bulb{fill:#FFF8EC}
+#pet .halo{fill:var(--accent);opacity:.3}
+#pet .white{fill:#fff}
+#pet .ink{fill:var(--ink)}
+#pet .stroke{fill:none;stroke:var(--ink);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
+#pet .brow{fill:none;stroke:rgba(27,22,38,.5);stroke-width:5;stroke-linecap:round}
+#pet .cheek{fill:#FF7A8A;opacity:.55}
+#pet .heart{fill:#E0427A}
+#pet .bigheart{fill:#FF8FA3}
+#pet .tongue{fill:#FF6F7D}
+#pet .spark{fill:#FFF3B8}
+#pet .acc{fill:var(--accent)}
+#pet .eye,#pet .look,#pet .td,#pet .hrt,#pet .z,#pet .piece,#pet .mouth-b,#pet .sig,#pet .bigheart{transform-box:fill-box;transform-origin:center}
+#pet .arm-l{transform-box:fill-box;transform-origin:100% 0}
+#pet .arm-r{transform-box:fill-box;transform-origin:0 0}
+#pet .rig{transform-box:fill-box;transform-origin:50% 100%}
+#pet .jelly{transform-origin:150px 282px}
+
+/* qué se ve en cada ánimo: el color del cuerpo, ojos, boca y efectos */
+body[data-mood=sleep] #pet .b-sleep,body[data-mood=sleep] #pet .e-sleep,body[data-mood=sleep] #pet .m-sleep,body[data-mood=sleep] #pet .fx-sleep,
+body[data-mood=idle] #pet .b-idle,body[data-mood=idle] #pet .e-open,body[data-mood=idle] #pet .m-idle,
+body[data-mood=busy] #pet .b-busy,body[data-mood=busy] #pet .e-open,body[data-mood=busy] #pet .m-busy,body[data-mood=busy] #pet .fx-busy,
+body[data-mood=attention] #pet .b-attn,body[data-mood=attention] #pet .e-open,body[data-mood=attention] #pet .brows,body[data-mood=attention] #pet .m-attn,body[data-mood=attention] #pet .fx-attn,
+body[data-mood=celebrate] #pet .b-celebrate,body[data-mood=celebrate] #pet .e-happy,body[data-mood=celebrate] #pet .m-big,body[data-mood=celebrate] #pet .cheeks,body[data-mood=celebrate] #pet .fx-conf,
+body[data-mood=dizzy] #pet .b-dizzy,body[data-mood=dizzy] #pet .e-dizzy,body[data-mood=dizzy] #pet .brows,body[data-mood=dizzy] #pet .m-wavy,body[data-mood=dizzy] #pet .fx-dizzy,
+body[data-mood=heart] #pet .b-heart,body[data-mood=heart] #pet .e-heart,body[data-mood=heart] #pet .m-idle,body[data-mood=heart] #pet .cheeks,body[data-mood=heart] #pet .fx-heart,body[data-mood=heart] #pet .arm-hug{display:inline}
+body[data-mood=heart] #pet .arm-l{display:none}
+
+/* al cambiar de ánimo Buddy aterriza como gelatina: aplasta, se estira y se asienta */
+#pet .jelly.land{animation:land .62s cubic-bezier(.3,.7,.4,1) both}
+@keyframes land{0%{transform:scale(1.14,.82)}38%{transform:scale(.93,1.09)}66%{transform:scale(1.04,.97)}100%{transform:scale(1,1)}}
+@keyframes arm{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes popin{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes dim{0%,100%{opacity:.35}50%{opacity:.6}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+body[data-mood=sleep] #pet .aura{animation:dim 5s ease-in-out infinite}
+body[data-mood=attention] #pet .aura{animation:pulse .9s ease-in-out infinite}
+
+/* movimiento del cuerpo */
+body[data-mood=sleep] #pet .rig{animation:breathe 5s ease-in-out infinite}
+body[data-mood=idle] #pet .rig{animation:bob 3.4s ease-in-out infinite}
+body[data-mood=busy] #pet .rig{animation:rock 1.6s ease-in-out infinite}
+body[data-mood=attention] #pet .rig{animation:hop 1.1s ease-in-out infinite}
+body[data-mood=celebrate] #pet .rig{animation:jump .7s ease-in-out infinite}
+body[data-mood=dizzy] #pet .rig{animation:wobble 1s ease-in-out infinite}
+body[data-mood=heart] #pet .rig{animation:sway 2.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.015,1.03)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes rock{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes hop{0%,55%,100%{transform:translateY(0) scale(1,1)}20%{transform:translateY(-16px) scale(.98,1.03)}38%{transform:translateY(0) scale(1.03,.97)}}
+@keyframes jump{0%,100%{transform:translateY(0) scale(1.03,.97)}50%{transform:translateY(-24px) scale(.98,1.03)}}
+@keyframes wobble{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes sway{0%,100%{transform:rotate(-2.5deg) translateY(0)}50%{transform:rotate(2.5deg) translateY(-4px)}}
+
+/* ojos y bombillo */
+#pet .e-open .eye{animation:blink 4.6s infinite}
+@keyframes blink{0%,92%,100%{transform:scaleY(1)}95.5%{transform:scaleY(.08)}}
+body[data-mood=busy] #pet .e-open .look{animation:look 3.2s ease-in-out infinite}
+@keyframes look{0%,100%{transform:translateX(-6px)}50%{transform:translateX(6px)}}
+body[data-mood=attention] #pet .e-open .look{transform:scale(1.12)}
+body[data-mood=idle] #pet .halo{animation:glow 3.4s ease-in-out infinite}
+body[data-mood=busy] #pet .halo{animation:glow 1s ease-in-out infinite}
+body[data-mood=attention] #pet .halo{animation:glow .5s ease-in-out infinite}
+body[data-mood=celebrate] #pet .halo,body[data-mood=heart] #pet .halo{animation:glow 1.2s ease-in-out infinite}
+body[data-mood=sleep] #pet .halo{opacity:.12}
+@keyframes glow{0%,100%{opacity:.14}50%{opacity:.55}}
+#pet .e-dizzy .spin{animation:spin 1.4s linear infinite}
+#pet .e-dizzy .spin.r{animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+body[data-mood=heart] #pet .e-heart .heart,body[data-mood=heart] #pet .bigheart{animation:beat 1s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+body[data-mood=busy] #pet .m-busy{animation:munch 1.6s ease-in-out infinite}
+@keyframes munch{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.6)}}
+body[data-mood=heart] #pet .m-idle{transform:scale(1.3);transform-box:fill-box;transform-origin:center}
+
+/* brazos */
+body[data-mood=celebrate] #pet .arm-l{animation:wave-l .5s ease-in-out infinite alternate}
+body[data-mood=celebrate] #pet .arm-r{animation:wave-r .5s ease-in-out infinite alternate}
+body[data-mood=attention] #pet .arm-r{animation:wave-r .55s ease-in-out infinite alternate}
+@keyframes wave-l{from{transform:rotate(100deg)}to{transform:rotate(135deg)}}
+@keyframes wave-r{from{transform:rotate(-100deg)}to{transform:rotate(-135deg)}}
+
+/* efectos */
+#pet .z{fill:none;stroke:var(--accent);stroke-width:4;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:zz 3.6s ease-in-out infinite}
+#pet .z2{animation-delay:1.2s}
+#pet .z3{animation-delay:2.4s}
+@keyframes zz{0%{opacity:0;transform:translate(-6px,8px)}30%,75%{opacity:1}100%{opacity:0;transform:translate(8px,-14px)}}
+#pet .td{fill:var(--accent);animation:dot 1.2s ease-in-out infinite}
+#pet .td2{animation-delay:.2s}
+#pet .td3{animation-delay:.4s}
+@keyframes dot{0%,100%{transform:scale(.55);opacity:.5}50%{transform:scale(1);opacity:1}}
+#pet .sig{animation:pop .6s ease-in-out infinite alternate}
+#pet .sig2{animation-delay:.2s}
+#pet .sig3{animation-delay:.4s}
+@keyframes pop{from{transform:scale(.55) rotate(-10deg);opacity:.5}to{transform:scale(1.1) rotate(10deg);opacity:1}}
+#pet .piece{animation:fall 2.2s linear infinite;opacity:0}
+@keyframes fall{0%{opacity:1;transform:translate(0,-30px) rotate(0)}85%{opacity:1}100%{opacity:0;transform:translate(var(--dx),330px) rotate(var(--rot))}}
+#pet .orbit{transform-origin:150px 40px;animation:spin 2.4s linear infinite}
+#pet .hrt{fill:#FF8FA3;opacity:0;animation:rise 3s ease-out infinite}
+#pet .hrt2{animation-delay:1s}
+#pet .hrt3{animation-delay:2s}
+@keyframes rise{0%{opacity:0;transform:translate(0,14px) scale(.5)}20%{opacity:1}100%{opacity:0;transform:translate(var(--dx),-44px) scale(1.1)}}
+
+/* ---------- al tacto ----------
+   La zona de Buddy: un área transparente sobre su figura (192x196 desde x 74 / y 140: cubre el SVG y el GIF del pack, queda a 34px
+   de la placa y a 78px de la columna de la derecha, y no toca ningún botón). Tocarla le cambia el ánimo un rato (ver el script).
+   Antes del primer estado no hay zona. En un permiso SÍ sigue, pero quieta (no responde, no suena): un dedo es más ancho que su punta
+   y el navegador manda un toque que cae bajo los pies de Buddy al control más cercano, que es Denegar (la zona termina a 6px del
+   botón). Con la zona ahí, ese toque es de ella y no decide nada. */
+#petzone{position:absolute;left:74px;top:140px;width:192px;height:196px;z-index:3}
+body[data-screen=boot] #petzone{display:none}
+/* cada toque que Buddy acepta lo aprieta un poquito: así, con el corazón ya puesto, igual se nota que sintió el dedo */
+#pet svg.poke,#gif.poke{animation:poke .16s ease-out}
+@keyframes poke{0%{transform:scale(1)}40%{transform:scale(1.07,.93)}100%{transform:scale(1)}}
+/* el eco de un toque en una parte muerta de la pantalla: un círculo del acento (25%) que crece y se apaga en 140ms. Es un solo
+   elemento que se reutiliza; no atrapa toques y la posición va en --px/--py (transform, nada de layout) */
+#ping{position:absolute;left:0;top:0;width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--accent) 25%,transparent);
+  opacity:0;pointer-events:none;z-index:25;transform:translate(var(--px,-80px),var(--py,-80px)) scale(.6)}
+#ping.on{animation:ping .14s ease-out}
+@keyframes ping{from{opacity:1;transform:translate(var(--px),var(--py)) scale(.6)}to{opacity:0;transform:translate(var(--px),var(--py)) scale(1.15)}}
+
+/* ---------- modo noche ----------
+   #dim cubre todo el escenario, por encima de todo, y está quieto (transparente, sin atrapar toques) salvo que view.dim sea verdadero.
+   Dim con panel de verdad (view.backlight): la luz la baja el daemon, #dim queda transparente y solo atrapa el toque que despierta.
+   Dim sin panel: #dim además oscurece (negro al 78%, se desvanece en 600ms) y al despertar se aclara en 300ms. Solo opacity. */
+#dim{position:absolute;left:0;top:0;right:0;bottom:0;z-index:80;background:#000;opacity:0;pointer-events:none;transition:opacity .3s ease-out}
+#dim.on{pointer-events:auto}
+#dim.dark{opacity:.78;transition:opacity .6s ease-in}
+/* un permiso nunca queda tapado ni oscuro, diga lo que diga la bandera: #dim se apaga al instante, sin desvanecerse ni atrapar un toque */
+body[data-screen=ask] #dim{opacity:0;pointer-events:none;transition:opacity 0s}
+</style>
+</head>
+<body data-screen="boot" data-mood="sleep" data-real="sleep">
+<div id="stage">
+  <div id="glow"></div>
+
+  <header id="top" class="bar">
+    <div id="net" class="net" data-state="ready">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11L12 23V1l5.5 5.5-11 11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="net-name">Claude-····</span>
+      <svg id="net-lock" class="ic" viewBox="0 0 24 24" style="display:none"><rect x="5" y="11" width="14" height="10" rx="3" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <span id="net-open" class="open" style="display:none" data-i18n="net.open">sin cifrado</span>
+    </div>
+    <div id="clock">--:--</div>
+  </header>
+
+  <!-- Buddy: uno solo, lo muestran varias pantallas -->
+  <div id="pet">
+    <svg id="pet-svg" viewBox="0 0 300 310" role="img" aria-label="Buddy">
+      <defs>
+        <radialGradient id="g-aura" cx="50%" cy="50%" r="50%">
+          <stop class="aura-c" offset=".56" stop-opacity="0"/><stop class="aura-c" offset=".74" stop-opacity=".5"/><stop class="aura-c" offset="1" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="g-shade" cx="50%" cy="104%" r="78%">
+          <stop offset="0" stop-color="#1B1626" stop-opacity=".62"/><stop offset=".5" stop-color="#1B1626" stop-opacity=".24"/><stop offset="1" stop-color="#1B1626" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="g-sleep" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#DCD0FF"/><stop offset=".5" stop-color="#A78BFA"/><stop offset="1" stop-color="#5B48C8"/></linearGradient>
+        <linearGradient id="g-idle" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#FFDCCB"/><stop offset=".5" stop-color="#FF9E7A"/><stop offset="1" stop-color="#D9563A"/></linearGradient>
+        <linearGradient id="g-busy" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#BDF8EE"/><stop offset=".45" stop-color="#4FD1C5"/><stop offset="1" stop-color="#2F6FE8"/></linearGradient>
+        <linearGradient id="g-attn" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#FFF5BF"/><stop offset=".5" stop-color="#FFCF5C"/><stop offset="1" stop-color="#F08A24"/></linearGradient>
+        <linearGradient id="g-celebrate" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#EAFFB8"/><stop offset=".5" stop-color="#8BE76A"/><stop offset="1" stop-color="#1FAE5A"/></linearGradient>
+        <linearGradient id="g-dizzy" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#EEF2F8"/><stop offset=".5" stop-color="#A9B8CF"/><stop offset="1" stop-color="#6F7F9E"/></linearGradient>
+        <linearGradient id="g-heart" x1=".1" y1="0" x2=".9" y2="1"><stop offset="0" stop-color="#FFDAE0"/><stop offset=".5" stop-color="#FF8FA3"/><stop offset="1" stop-color="#D9437A"/></linearGradient>
+      </defs>
+
+      <ellipse class="shadow" cx="150" cy="292" rx="92" ry="10"/>
+      <circle class="aura" cx="150" cy="166" r="150" fill="url(#g-aura)"/>
+      <circle class="ring1" cx="150" cy="166" r="128"/>
+      <circle class="ring2" cx="150" cy="166" r="146"/>
+
+      <!-- efectos que no se mueven con el cuerpo -->
+      <g class="v fx-sleep">
+        <g transform="translate(228 70)"><path class="z z1" d="M0 0h14l-14 16h14"/></g>
+        <g transform="translate(250 40) scale(1.25)"><path class="z z2" d="M0 0h14l-14 16h14"/></g>
+        <g transform="translate(272 8) scale(1.5)"><path class="z z3" d="M0 0h14l-14 16h14"/></g>
+      </g>
+      <g class="v fx-busy">
+        <circle class="td td1" cx="236" cy="62" r="6"/>
+        <circle class="td td2" cx="256" cy="46" r="9"/>
+        <circle class="td td3" cx="282" cy="24" r="12"/>
+      </g>
+      <g class="v fx-attn">
+        <g transform="translate(240 56) scale(1.6)"><path class="spark sig sig1" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/></g>
+        <g transform="translate(272 96) scale(1.1)"><path class="spark sig sig2" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/></g>
+        <g transform="translate(262 20) scale(.8)"><path class="spark sig sig3" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/></g>
+      </g>
+      <g class="v fx-dizzy">
+        <g class="orbit">
+          <path class="spark" transform="translate(150 2)" d="M0-7L2-2L7 0L2 2L0 7L-2 2L-7 0L-2-2Z"/>
+          <path class="acc" transform="translate(196 62)" d="M0-7L2-2L7 0L2 2L0 7L-2 2L-7 0L-2-2Z"/>
+          <path class="acc" transform="translate(104 62)" d="M0-7L2-2L7 0L2 2L0 7L-2 2L-7 0L-2-2Z"/>
+        </g>
+      </g>
+      <!-- la lluvia de chispas cae detrás del cuerpo -->
+      <g class="v fx-conf">
+        <path class="piece" fill="#FFB457" transform="translate(24 0) scale(.9)" style="--dx:-10px;--rot:400deg;animation-delay:.1s;animation-duration:2.3s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#8BE76A" transform="translate(60 0) scale(.7)" style="--dx:12px;--rot:-360deg;animation-delay:.9s;animation-duration:2s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#4FD1C5" transform="translate(92 0) scale(1)" style="--dx:-8px;--rot:300deg;animation-delay:.4s;animation-duration:2.4s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#FF8FA3" transform="translate(126 0) scale(.8)" style="--dx:16px;--rot:-480deg;animation-delay:1.3s;animation-duration:2.1s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#FFCF5C" transform="translate(160 0) scale(1.1)" style="--dx:-14px;--rot:380deg;animation-delay:.6s;animation-duration:2.5s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#A78BFA" transform="translate(194 0) scale(.75)" style="--dx:10px;--rot:-300deg;animation-delay:1.6s;animation-duration:2.2s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#8FA5FF" transform="translate(226 0) scale(.9)" style="--dx:-12px;--rot:450deg;animation-delay:.2s;animation-duration:2s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#FFF3B8" transform="translate(258 0) scale(.7)" style="--dx:14px;--rot:-420deg;animation-delay:1.1s;animation-duration:2.6s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#FFB457" transform="translate(284 0) scale(.6)" style="--dx:-9px;--rot:330deg;animation-delay:.7s;animation-duration:2.2s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+        <path class="piece" fill="#8BE76A" transform="translate(44 0) scale(.8)" style="--dx:11px;--rot:-390deg;animation-delay:1.8s;animation-duration:2.3s" d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z"/>
+      </g>
+
+      <!-- el cuerpo -->
+      <g class="rig">
+        <g class="jelly">
+          <path class="stem" d="M150 56C148 42 156 32 170 26"/>
+          <circle class="halo" cx="172" cy="24" r="15"/>
+          <circle class="bulb" cx="172" cy="24" r="8"/>
+          <path class="arm arm-l noodle" d="M54 200C32 210 24 232 36 250"/>
+          <path class="arm arm-r noodle" d="M246 200C268 210 276 232 264 250"/>
+          <path class="v b-sleep" fill="url(#g-sleep)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-idle" fill="url(#g-idle)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-busy" fill="url(#g-busy)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-attn" fill="url(#g-attn)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-celebrate" fill="url(#g-celebrate)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-dizzy" fill="url(#g-dizzy)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="v b-heart" fill="url(#g-heart)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path fill="url(#g-shade)" d="M150 54C222 54 264 110 264 182C264 250 224 282 150 282C76 282 36 250 36 182C36 110 78 54 150 54Z"/>
+          <path class="rim" d="M70 118C86 86 112 68 142 66"/>
+          <path class="rim2" d="M252 150C266 198 244 256 196 272"/>
+          <ellipse class="gloss" cx="98" cy="104" rx="34" ry="14" transform="rotate(-30 98 104)"/>
+          <ellipse class="gloss2" cx="196" cy="92" rx="11" ry="6" transform="rotate(24 196 92)"/>
+          <circle class="glint" cx="134" cy="80" r="5"/>
+
+          <!-- ojos saltones -->
+          <g class="v e-open"><g class="look">
+            <g class="eye"><ellipse class="white" cx="112" cy="156" rx="17" ry="20"/><circle class="ink" cx="116" cy="160" r="9"/><circle class="white" cx="119.5" cy="156" r="3"/></g>
+            <g class="eye"><ellipse class="white" cx="188" cy="156" rx="17" ry="20"/><circle class="ink" cx="192" cy="160" r="9"/><circle class="white" cx="195.5" cy="156" r="3"/></g>
+          </g></g>
+          <g class="v brows"><path class="brow" d="M96 126q16-10 32-2"/><path class="brow" d="M172 124q16-8 32 2"/></g>
+          <g class="v e-sleep">
+            <path class="stroke" d="M96 158q16 12 32 0"/><path class="stroke" d="M172 158q16 12 32 0"/>
+          </g>
+          <g class="v e-happy">
+            <path class="stroke" d="M96 162q16-20 32 0"/><path class="stroke" d="M172 162q16-20 32 0"/>
+          </g>
+          <g class="v e-heart">
+            <g transform="translate(112 160) scale(.95)"><path class="heart" d="M0 11C-20-3-15-19-6-19C-2-19 0-15 0-13C0-15 2-19 6-19C15-19 20-3 0 11Z"/></g>
+            <g transform="translate(188 160) scale(.95)"><path class="heart" d="M0 11C-20-3-15-19-6-19C-2-19 0-15 0-13C0-15 2-19 6-19C15-19 20-3 0 11Z"/></g>
+          </g>
+          <g class="v e-dizzy">
+            <g transform="translate(112 156) scale(.95)"><path class="stroke spin" style="stroke-width:4" d="M0 0L.3.1L.5.3L.5.6L.5 1L.2 1.3L-.2 1.6L-.8 1.7L-1.4 1.6L-2.1 1.3L-2.6.8L-3 0L-3.1-.9L-3-1.9L-2.5-2.9L-1.7-3.7L-.6-4.3L.7-4.6L2-4.5L3.4-3.9L4.6-2.9L5.5-1.6L6 0L6 1.8L5.5 3.5L4.5 5.2L2.9 6.5L1 7.3L-1.1 7.6L-3.3 7.2L-5.4 6.2L-7.1 4.6L-8.4 2.5L-9 0L-8.9-2.6L-8-5.2L-6.4-7.4L-4.2-9.2L-1.5-10.3L1.5-10.5L4.5-9.9L7.3-8.5L9.6-6.2L11.3-3.3L12 0"/></g>
+            <g transform="translate(188 156) scale(.95)"><path class="stroke spin r" style="stroke-width:4" d="M0 0L.3.1L.5.3L.5.6L.5 1L.2 1.3L-.2 1.6L-.8 1.7L-1.4 1.6L-2.1 1.3L-2.6.8L-3 0L-3.1-.9L-3-1.9L-2.5-2.9L-1.7-3.7L-.6-4.3L.7-4.6L2-4.5L3.4-3.9L4.6-2.9L5.5-1.6L6 0L6 1.8L5.5 3.5L4.5 5.2L2.9 6.5L1 7.3L-1.1 7.6L-3.3 7.2L-5.4 6.2L-7.1 4.6L-8.4 2.5L-9 0L-8.9-2.6L-8-5.2L-6.4-7.4L-4.2-9.2L-1.5-10.3L1.5-10.5L4.5-9.9L7.3-8.5L9.6-6.2L11.3-3.3L12 0"/></g>
+          </g>
+
+          <!-- boca -->
+          <path class="v m-idle stroke" d="M136 200q14 10 28 0"/>
+          <path class="v m-busy stroke mouth-b" d="M138 202h24"/>
+          <g class="v m-attn"><ellipse class="ink" cx="150" cy="206" rx="8" ry="10"/></g>
+          <g class="v m-big"><path class="ink" d="M128 194Q150 232 172 194Z"/><ellipse class="tongue" cx="150" cy="213" rx="8" ry="5"/></g>
+          <path class="v m-sleep stroke" d="M143 204q7 5 14 0"/>
+          <path class="v m-wavy stroke" d="M128 202q5.5-8 11 0t11 0t11 0t11 0"/>
+          <g class="v cheeks"><ellipse class="cheek" cx="84" cy="196" rx="13" ry="8"/><ellipse class="cheek" cx="216" cy="196" rx="13" ry="8"/></g>
+
+          <!-- cuando está contento abraza un corazón -->
+          <g class="v fx-heart">
+            <g transform="translate(108 240) scale(2.4)"><path class="bigheart" d="M0 11C-20-3-15-19-6-19C-2-19 0-15 0-13C0-15 2-19 6-19C15-19 20-3 0 11Z"/></g>
+          </g>
+          <path class="v arm-hug noodle" d="M54 200C40 232 64 262 106 258"/>
+        </g>
+      </g>
+
+      <!-- corazones que suben por delante -->
+      <g class="v fx-heart">
+        <g transform="translate(96 78)"><path class="hrt hrt1" style="--dx:-14px" d="M0 9C-14-1-11-13-4-13C-1-13 0-10 0-8C0-10 1-13 4-13C11-13 14-1 0 9Z"/></g>
+        <g transform="translate(150 66)"><path class="hrt hrt2" style="--dx:6px" d="M0 9C-14-1-11-13-4-13C-1-13 0-10 0-8C0-10 1-13 4-13C11-13 14-1 0 9Z"/></g>
+        <g transform="translate(204 80)"><path class="hrt hrt3" style="--dx:16px" d="M0 9C-14-1-11-13-4-13C-1-13 0-10 0-8C0-10 1-13 4-13C11-13 14-1 0 9Z"/></g>
+      </g>
+    </svg>
+  </div>
+
+  <!-- el personaje del pack, si hay uno: las imágenes las agrega el script -->
+  <div id="gif"></div>
+  <!-- la zona táctil de Buddy: transparente, encima de su figura (SVG o pack) -->
+  <div id="petzone" aria-hidden="true"></div>
+
+  <!-- su placa: nombre, ánimo y nivel -->
+  <div id="plate">
+    <div class="pl-name"><b id="pet-name">Buddy</b><span id="pet-owner"></span></div>
+    <div id="mood">Durmiendo</div>
+    <div class="pl-lvl"><span id="pet-level">Nivel 0</span><span class="xptrack"><i id="xp"></i></span></div>
+  </div>
+
+  <main>
+    <section id="s-boot" class="screen">
+      <div class="col"><div class="bubble"><h1 data-i18n="boot.title">Conectando…</h1><p class="note" data-i18n="boot.note">Esperando al buddy.</p></div></div>
+    </section>
+
+    <section id="s-wait" class="screen">
+      <div class="col">
+        <div class="bubble">
+          <h1 data-i18n="wait.title">Esperando a Claude desktop</h1>
+          <ol class="steps">
+            <li><span><span data-i18n="wait.s1a">En la Mac abrí el menú </span><b>Developer</b><span data-i18n="wait.s1b"> y elegí </span><b>Open Hardware Buddy…</b></span></li>
+            <li><span><span data-i18n="wait.s2a">Elegí </span><span id="wait-name" class="chip">Claude-····</span><span data-i18n="wait.s2b"> y tocá </span><b>Connect</b>.</span></li>
+          </ol>
+          <p class="note" data-i18n="wait.note">Si ya lo emparejaste antes, se conecta solo.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-down" class="screen">
+      <div class="col">
+        <div class="bubble">
+          <h1 id="down-title" data-i18n="down.title.notready">Bluetooth no está listo</h1>
+          <div id="down-reason" class="reason"></div>
+          <p id="down-note" class="note" data-i18n="down.note.retry">El buddy lo reintenta solo.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-main" class="screen">
+      <div class="col">
+        <div id="feed" class="bubble">
+          <div id="feed-msg"></div>
+          <ul id="feed-list"></ul>
+          <div id="feed-empty" data-i18n="feed.nothing">Sin novedades por ahora.</div>
+          <div id="feed-detail"></div>
+          <div id="task-view">
+            <div class="tv-head">
+              <div class="tv-name" id="tv-name"></div>
+              <button id="tv-done" class="tv-done" type="button">
+                <svg viewBox="0 0 16 16"><path d="M3 8.6l3.3 3.3L13 4.9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span data-i18n="tv.done">Listo</span>
+              </button>
+              <button id="tv-back" class="tv-back" type="button">
+                <svg viewBox="0 0 16 16"><path d="M10.5 2.5L5 8l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span data-i18n="tv.back">Volver</span>
+              </button>
+            </div>
+            <div class="tv-sub"><span class="tv-ag" id="tv-age"></span><span class="tv-dd" id="tv-did"></span><span class="tv-na" id="tv-na"></span></div>
+            <div id="tv-said"><span id="tv-pre"></span><span id="tv-text"></span></div>
+          </div>
+        </div>
+        <div class="pills">
+          <span class="pill"><b id="n-total">0</b><span data-i18n="pill.sessions">sesiones</span></span>
+          <span class="pill"><b id="n-running">0</b><span data-i18n="pill.running">trabajan</span></span>
+          <span class="pill" id="t-waiting"><b id="n-waiting">0</b><span data-i18n="pill.waiting">esperan</span></span>
+        </div>
+        <div class="foot">
+          <span class="pill sm"><b id="f-tokens">0</b><span data-i18n="foot.tokens">tokens hoy</span></span>
+          <span class="pill sm"><b id="f-ok">0</b><span data-i18n="foot.approved">aprobadas</span></span>
+          <span class="pill sm"><b id="f-no">0</b><span data-i18n="foot.denied">denegadas</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="s-pair" class="screen">
+      <div class="col">
+        <div class="bubble"><h1 data-i18n="pair.title">Emparejar con Claude desktop</h1><p class="note" data-i18n="pair.note">Escribí este código en la Mac cuando lo pida.</p><p id="pair-sub"></p></div>
+        <div class="card"><div id="digits"></div></div>
+      </div>
+    </section>
+
+    <section id="s-ask" class="screen">
+      <div class="what"><div id="tool" class="tool" data-i18n="ask.default">Permiso</div><div id="age" class="age"></div><div id="ask-note" data-i18n="ask.note">Respondé en la Mac: acá no se puede elegir una opción.</div><div id="queue" class="pill sm hot" style="display:none"></div></div>
+      <div class="bubble hint-wrap"><div id="hint" class="hint"></div></div>
+      <div id="always-note" style="display:none"><b data-i18n="btn.always">Siempre</b><span data-i18n="ask.saves"> guarda </span><span id="always-rule"></span></div>
+      <div id="btns" class="btns hold">
+        <button id="b-no" class="btn no" type="button">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+          <span id="b-no-t" data-i18n="btn.deny">Denegar</span>
+        </button>
+        <button id="b-always" class="btn always" type="button">
+          <svg viewBox="0 0 24 24"><path d="M2 12.5l4.5 4.5L15 8.5M10.5 15.5l1.5 1.5L22 7" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="b-always-t" data-i18n="btn.always">Siempre</span>
+        </button>
+        <button id="b-ok" class="btn ok" type="button">
+          <svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="b-ok-t" data-i18n="btn.once">Aprobar una vez</span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <div id="flash" class="flash">
+    <div class="ring">
+      <svg class="c" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg class="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+    </div>
+    <div id="flash-t" class="t"></div>
+  </div>
+  <div id="offline"><span data-i18n="offline.title">Sin conexión con el buddy</span><small data-i18n="offline.retry">Reintentando…</small></div>
+  <div id="toast"></div>
+  <div id="demo-tag"></div>
+  <div id="ping" aria-hidden="true"></div>
+  <!-- modo noche: encima de todo, quieto salvo de noche (ver el bloque "modo noche" del script) -->
+  <div id="dim" aria-hidden="true"></div>
+  <template id="row-proto"><li class="task"><button type="button" class="trow"><b></b><span></span><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.6l3.3 3.3L13 4.9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><i></i><svg viewBox="0 0 16 16"><path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li></template>
+  <!-- la fila de un aviso: campana, título, marca de ok o de warn (solo una se ve), hace cuánto llegó, flecha -->
+  <template id="note-proto"><li class="notice"><button type="button" class="trow"><svg class="bell" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.1a3.9 3.9 0 0 0-3.9 3.9c0 3.2-1.3 4.2-1.3 4.2h10.4s-1.3-1-1.3-4.2A3.9 3.9 0 0 0 8 2.1ZM6.5 12.9a1.6 1.6 0 0 0 3 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><b></b><svg class="ck" viewBox="0 0 16 16"><path d="M3 8.6l3.3 3.3L13 4.9" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="wn" viewBox="0 0 16 16"><path d="M8 3v6.2M8 12.6v.2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg><i></i><svg viewBox="0 0 16 16"><path d="M5 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li></template>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var query = new URLSearchParams(location.search);
+  var DEMO = query.get('demo');
+  var POLL = Math.max(0, Number(query.get('poll')) || 0);   // ?poll=500: pedir /state cada tanto en vez de /events (túneles que atascan el stream)
+  var meta = document.querySelector('meta[name=buddy-token]');
+  var TOKEN = meta ? meta.content : '';
+  var ARM_MS = 600;           // los botones esperan un poco: un dedo que ya estaba tocando no decide nada
+  var STALE_MS = 25000;       // sin noticias del daemon (ni el latido) en tanto tiempo: reconectar
+  var FEED_STICKY_MS = 20000; // cuánto se queda el último mensaje cuando el Mac manda vacío
+  var feedKeep = { msg: '', entries: [], at: 0 };
+
+  /* ---------------- idiomas ----------------
+     Todo texto que la página dice por su cuenta sale de esta tabla (es = el español de siempre, con voseo; en = inglés). La
+     lengua la dice el daemon en cada estado (`view.lang`); en la vista previa, `&lang=en`; y la página servida la trae en
+     <meta name=buddy-lang> para que hasta "Conectando…" salga en el idioma. Lo desconocido o ausente es español. `t(clave, {n: 3})`
+     rellena los {marcadores}; el plural se resuelve con claves .one / .other que se eligen a mano (`tn`). Un texto en HTML lleva
+     el atributo data-i18n con su clave y se pone con textContent, nunca como HTML. Lo que llega de afuera (títulos, grupos, lo que dijo un hilo,
+     avisos) es de quien lo escribió y no se traduce. */
+  var I18N = {
+    es: {
+      'net.open': 'sin cifrado',
+      'boot.title': 'Conectando…', 'boot.note': 'Esperando al buddy.',
+      'wait.title': 'Esperando a Claude desktop',
+      'wait.s1a': 'En la Mac abrí el menú ', 'wait.s1b': ' y elegí ',
+      'wait.s2a': 'Elegí ', 'wait.s2b': ' y tocá ',
+      'wait.note': 'Si ya lo emparejaste antes, se conecta solo.',
+      'down.title.notready': 'Bluetooth no está listo', 'down.title.starting': 'Iniciando Bluetooth…',
+      'down.note.retry': 'El buddy lo reintenta solo.', 'down.note.starting': 'Un momento.',
+      'pair.title': 'Emparejar con Claude desktop', 'pair.note': 'Escribí este código en la Mac cuando lo pida.',
+      'pair.progress': 'Van {n} de {total} dígitos',
+      'mood.sleep': 'Durmiendo', 'mood.idle': 'Tranquilo', 'mood.busy': 'Trabajando', 'mood.attention': 'Te necesita',
+      'mood.celebrate': '¡Terminó!', 'mood.dizzy': 'Mareado', 'mood.heart': 'Contento',
+      'plate.owner': 'de {owner}', 'plate.level': 'Nivel {n}',
+      'pill.sessions': 'sesiones', 'pill.running': 'trabajan', 'pill.waiting': 'esperan',
+      'foot.tokens': 'tokens hoy', 'foot.approved': 'aprobadas', 'foot.denied': 'denegadas',
+      'feed.nothing': 'Sin novedades por ahora.',
+      'feed.idle': 'Nadie trabaja ahora.', 'feed.tasks.one': 'Una tarea en marcha', 'feed.tasks.other': '{n} tareas en marcha',
+      'feed.notices.one': 'Un aviso', 'feed.notices.other': '{n} avisos',
+      'empty.waiting': 'Te esperan en la Mac.', 'empty.running': 'Todo en marcha.', 'empty.calm': 'Todo tranquilo.', 'empty.here': 'Acá espero.',
+      'detail.waiting': 'Una sesión necesita algo que solo se decide allá.', 'detail.none': 'No hay sesiones abiertas en la Mac.',
+      'detail.running.one': 'Una sesión trabaja y nada que decidir.', 'detail.running.other': '{n} sesiones trabajan y nada que decidir.',
+      'detail.open.one': 'Una sesión abierta, ninguna trabajando.', 'detail.open.other': '{n} sesiones abiertas, ninguna trabajando.',
+      'msg.asked': 'Te hizo una pregunta en la Mac', 'msg.used': 'Usó {tool}',
+      'thread.fallback': 'sesión', 'group.terminal': 'Terminal', 'group.runs': 'Corridas', 'group.notices': 'Avisos · {n}',
+      'row.done': 'terminó', 'row.done.with': 'terminó: {what}', 'row.working': 'trabajando',
+      'row.quiet': 'callada hace {span}', 'row.more': '+{n} más',
+      'span.min': '{n} min', 'span.h': '{n} h', 'span.d': '{n} d',
+      'ago': 'hace {age}', 'tv.for': 'lleva {age}', 'tv.before': 'Antes dijo: ',
+      'tv.none.idle': 'No dejó ningún mensaje.', 'tv.none.working': 'Todavía no dijo nada.',
+      'run.note.unknown': 'Sigue corriendo; no hay más detalle de lo que hace.',
+      'run.note.quiet': 'Sigue corriendo, pero no escribe nada desde hace {span}.',
+      'run.note.talking': 'Sigue corriendo. Escribió hace {age}.',
+      'tv.done': 'Listo', 'tv.back': 'Volver',
+      'notice.label': 'Aviso', 'notice.from': 'de {source}', 'notice.nodetail': 'Sin más detalle.',
+      'ask.default': 'Permiso', 'ask.question': 'Te pregunta algo',
+      'ask.note': 'Respondé en la Mac: acá no se puede elegir una opción.', 'ask.saves': ' guarda ',
+      'ask.request': '{who} pide permiso', 'ask.asks': '{who} pregunta', 'ask.queue': '+{n} en cola',
+      'hint.question': 'La pregunta solo se ve en la Mac.', 'hint.none': 'Sin detalle.',
+      'btn.deny': 'Denegar', 'btn.once': 'Aprobar una vez', 'btn.always': 'Siempre', 'btn.sending': 'Enviando…',
+      'flash.denied': 'Denegado', 'flash.always': 'Aprobado siempre', 'flash.approved': 'Aprobado',
+      'toast.resolved': 'Ya se resolvió en otro lado', 'toast.reload': 'Recargando la pantalla…', 'toast.failed': 'No se pudo enviar ({status})',
+      'offline.title': 'Sin conexión con el buddy', 'offline.retry': 'Reintentando…'
+    },
+    en: {
+      'net.open': 'unencrypted',
+      'boot.title': 'Connecting…', 'boot.note': 'Waiting for the buddy.',
+      'wait.title': 'Waiting for Claude desktop',
+      'wait.s1a': 'On the Mac, open the ', 'wait.s1b': ' menu and choose ',
+      'wait.s2a': 'Pick ', 'wait.s2b': ' and tap ',
+      'wait.note': 'If you paired it before, it connects by itself.',
+      'down.title.notready': 'Bluetooth is not ready', 'down.title.starting': 'Starting Bluetooth…',
+      'down.note.retry': 'The buddy keeps retrying on its own.', 'down.note.starting': 'One moment.',
+      'pair.title': 'Pair with Claude desktop', 'pair.note': 'Type this code on the Mac when it asks.',
+      'pair.progress': '{n} of {total} digits entered',
+      'mood.sleep': 'Sleeping', 'mood.idle': 'Calm', 'mood.busy': 'Working', 'mood.attention': 'Needs you',
+      'mood.celebrate': 'All done!', 'mood.dizzy': 'Dizzy', 'mood.heart': 'Happy',
+      'plate.owner': 'belongs to {owner}', 'plate.level': 'Level {n}',
+      'pill.sessions': 'sessions', 'pill.running': 'working', 'pill.waiting': 'waiting',
+      'foot.tokens': 'tokens today', 'foot.approved': 'approved', 'foot.denied': 'denied',
+      'feed.nothing': 'Nothing new for now.',
+      'feed.idle': 'Nothing is running right now.', 'feed.tasks.one': 'One task running', 'feed.tasks.other': '{n} tasks running',
+      'feed.notices.one': 'One notice', 'feed.notices.other': '{n} notices',
+      'empty.waiting': 'Your turn on the Mac.', 'empty.running': 'Everything is running.', 'empty.calm': 'All quiet.', 'empty.here': 'Waiting right here.',
+      'detail.waiting': 'A session needs a decision that can only be made on the Mac.', 'detail.none': 'No sessions are open on the Mac.',
+      'detail.running.one': 'One session is working, nothing to decide.', 'detail.running.other': '{n} sessions are working, nothing to decide.',
+      'detail.open.one': 'One session open, none working.', 'detail.open.other': '{n} sessions open, none working.',
+      'msg.asked': 'It asked you a question on the Mac', 'msg.used': 'Used {tool}',
+      'thread.fallback': 'session', 'group.terminal': 'Terminal', 'group.runs': 'Runs', 'group.notices': 'Notices · {n}',
+      'row.done': 'finished', 'row.done.with': 'finished: {what}', 'row.working': 'working',
+      'row.quiet': 'quiet for {span}', 'row.more': '+{n} more',
+      'span.min': '{n} min', 'span.h': '{n} h', 'span.d': '{n} d',
+      'ago': '{age} ago', 'tv.for': 'running for {age}', 'tv.before': 'Earlier it said: ',
+      'tv.none.idle': 'It left no message.', 'tv.none.working': 'It has not said anything yet.',
+      'run.note.unknown': 'Still running; there is no detail on what it is doing.',
+      'run.note.quiet': 'Still running, but it has written nothing for {span}.',
+      'run.note.talking': 'Still running. It wrote {age} ago.',
+      'tv.done': 'Done', 'tv.back': 'Back',
+      'notice.label': 'Notice', 'notice.from': 'from {source}', 'notice.nodetail': 'No more detail.',
+      'ask.default': 'Permission', 'ask.question': 'Has a question',
+      'ask.note': 'Pick an answer on the Mac, not here.', 'ask.saves': ' saves ',
+      'ask.request': '{who} asks permission', 'ask.asks': '{who} asks', 'ask.queue': '+{n} queued',
+      'hint.question': 'The question can only be seen on the Mac.', 'hint.none': 'No details.',
+      'btn.deny': 'Deny', 'btn.once': 'Approve once', 'btn.always': 'Always', 'btn.sending': 'Sending…',
+      'flash.denied': 'Denied', 'flash.always': 'Always approved', 'flash.approved': 'Approved',
+      'toast.resolved': 'Already resolved elsewhere', 'toast.reload': 'Reloading the screen…', 'toast.failed': 'Could not send ({status})',
+      'offline.title': 'No connection to the buddy', 'offline.retry': 'Retrying…'
+    }
+  };
+  var lang = 'es', langApplied = false;
+  function pickLang(l) { return l === 'en' ? 'en' : 'es'; }                       // lo desconocido o ausente es español
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  /* un texto de la tabla con sus {marcadores}; una clave que falta en el idioma cae al español y, si falta del todo, se ve como ⟦clave⟧ */
+  function t(key, params) {
+    var s = has(I18N[lang], key) ? I18N[lang][key] : has(I18N.es, key) ? I18N.es[key] : '⟦' + key + '⟧';
+    return params ? s.replace(/\{(\w+)\}/g, function (m, k) { return has(params, k) ? String(params[k]) : m; }) : s;
+  }
+  /* el plural a mano: una clave para uno y otra para los demás (el español y el inglés dicen igual el cero que el resto) */
+  function tn(n, one, other, params) { var p = Object.assign({ n: n }, params || {}); return t(n === 1 ? one : other, p); }
+
+  var MOODS = {   // ánimo -> clave de su rótulo
+    sleep: 'mood.sleep', idle: 'mood.idle', busy: 'mood.busy', attention: 'mood.attention',
+    celebrate: 'mood.celebrate', dizzy: 'mood.dizzy', heart: 'mood.heart'
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
+  function setAttr(el, name, v) { if (el.getAttribute(name) !== v) el.setAttribute(name, v); }
+
+  /* Cambia el idioma de toda la página: los textos de HTML (data-i18n), <html lang> y lo que se guardó ya traducido. Lo demás (filas,
+     píldoras, botones) se pinta en cada render() desde la tabla, así que después de esto el render que sigue lo deja todo en el idioma.
+     Sin estado todavía (la placa de la pantalla de arranque) se pinta aquí lo que render() no pinta. */
+  function applyLang(l) {
+    l = pickLang(l);
+    if (langApplied && l === lang) return false;
+    lang = l; langApplied = true;
+    document.documentElement.setAttribute('lang', l);
+    var els = document.querySelectorAll('[data-i18n]');
+    for (var i = 0; i < els.length; i++) setText(els[i], t(els[i].getAttribute('data-i18n')));
+    feedKeep = { msg: '', entries: [], at: 0 };       // lo humanizado se guardó en el idioma anterior
+    $('feed-list').removeAttribute('data-sig');       // y la lista del protocolo, hecha de lo mismo, se arma de nuevo
+    if (!view) { setText($('mood'), t(MOODS.sleep)); setText($('pet-level'), t('plate.level', { n: 0 })); }
+    return true;
+  }
+
+  if (query.has('kiosk')) document.body.classList.add('kiosk');
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  /* el escenario mide 800x480 y se escala a la ventana */
+  function fit() {
+    var s = Math.min(window.innerWidth / 800, window.innerHeight / 480);
+    $('stage').style.setProperty('--s', String(s));
+  }
+  window.addEventListener('resize', fit);
+  fit();
+
+  /* ---------------- estado ---------------- */
+  var view = null;            // lo último que dijo el buddy
+  var bootId = null;          // qué arranque del daemon nos sirvió esta página (cambia al reiniciarlo)
+  var seen = {};              // clave del pedido -> cuándo lo vimos por primera vez
+  var sending = {};           // clave del pedido -> decisión en camino
+  var holdUntil = 0;          // hasta cuándo los botones están dormidos
+  var curKey = '';
+  var armTimer = 0;
+  var lastMood = '';
+
+  var langMeta = document.querySelector('meta[name=buddy-lang]');
+  applyLang(DEMO ? query.get('lang') : langMeta ? langMeta.content : 'es');   // la vista previa lo pide con &lang=en; la página servida lo trae en el <meta>
+
+  var digitEls = [];
+  (function buildDigits() {
+    var box = $('digits');
+    for (var i = 0; i < 6; i++) {
+      if (i === 3) { var g = document.createElement('span'); g.className = 'digits-gap'; box.appendChild(g); }
+      var d = document.createElement('div'); d.className = 'digit'; box.appendChild(d); digitEls.push(d);
+    }
+  })();
+
+  function fmtCount(n) {
+    n = Number(n) || 0;
+    if (n < 1000) return String(n);
+    if (n < 10000) return (n / 1000).toFixed(1) + 'k';
+    if (n < 1000000) return Math.round(n / 1000) + 'k';
+    return (n / 1000000).toFixed(1) + 'M';
+  }
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+  function localClock() { var d = new Date(); return two(d.getHours()) + ':' + two(d.getMinutes()); }
+  /* m:ss; desde la hora, h:mm:ss (una corrida que lleva horas: 1:00:43, 10:00:00). Las edades de los hilos siguen en m:ss: vencen a los 30 min */
+  function fmtAge(ms) {
+    var s = Math.max(0, Math.floor(ms / 1000));
+    if (s >= 3600) return Math.floor(s / 3600) + ':' + two(Math.floor(s % 3600 / 60)) + ':' + two(s % 60);
+    return Math.floor(s / 60) + ':' + two(s % 60);
+  }
+
+  /* Claude desktop manda relleno en inglés cuando no hay texto: "(no messages)", "(called Bash)".
+     Lo primero no se muestra; lo segundo se dice en el idioma de la pantalla. Todo sigue siendo texto plano. */
+  function humanize(s) {
+    s = String(s || '').trim();
+    if (/^\((no messages|no sessions|idle)\)$/i.test(s)) return '';
+    if (/^\(called AskUserQuestion\)$/i.test(s)) return t('msg.asked');
+    var called = /^\(called ([^)]{1,80})\)$/.exec(s);
+    if (called) return t('msg.used', { tool: called[1] });
+    return s;
+  }
+
+  function current() {
+    return view && view.approvals && view.approvals.length ? view.approvals[0] : null;
+  }
+  /* AskUserQuestion llega como permiso pero sin la pregunta: aprobarla acá la descartaría sin respuesta */
+  function isQuestion(a) { return !!a && /^AskUserQuestion$/i.test(a.tool || ''); }
+
+  /* ---------------- el personaje del pack ---------------- */
+  var packSig = 'none';       // qué pack tiene la página cargado (JSON del view.character, con su rev)
+  var packSeq = 0;            // cuál fue la última carga pedida: una anterior que llega tarde se tira
+  var packWait = false;       // hay imágenes nuevas en camino: las de ahora se quedan a la vista hasta que lleguen
+  var gifIdx = 0;             // variante de idle en turno (los packs traen varias para que no se repita)
+  var curMood = 'sleep';      // el ánimo que dice el servidor (el que cuenta la píldora); lo que Buddy muestra está en shownMood()
+
+  /* El archivo de un pack puede cambiar sin cambiar de nombre (el pack se reemplaza en el Pi): el servidor suma a view.character
+     un `rev` que cambia con cualquier archivo y se pega a la URL, así una imagen nueva nunca sale de la memoria del navegador.
+     Sin rev (un daemon viejo) la URL es la de siempre. El rev viene de afuera: va codificado, y si no es un texto no se usa. */
+  function packUrl(c, file) {
+    var url = '/character/' + encodeURIComponent(c.name) + '/' + encodeURIComponent(file);
+    return typeof c.rev === 'string' && c.rev ? url + '?v=' + encodeURIComponent(c.rev) : url;
+  }
+
+  function loadPack(c) {
+    var box = $('gif'), mine = ++packSeq;
+    document.body.classList.toggle('pack', !!c);
+    document.body.classList.toggle('pixel', !!c && c.render === 'pixel');
+    var st = document.body.style;
+    ['--ground', '--bone', '--bone-2', '--accent', '--accent-real'].forEach(function (k) { st.removeProperty(k); });
+    packWait = false;
+    if (!c) { while (box.firstChild) box.removeChild(box.firstChild); return; }
+    var col = c.colors || {};   // el servidor ya los filtró: solo #rrggbb
+    if (col.bg) st.setProperty('--ground', col.bg);
+    if (col.text) st.setProperty('--bone', col.text);
+    if (col.textDim) st.setProperty('--bone-2', col.textDim);
+    if (col.body) { st.setProperty('--accent', col.body); st.setProperty('--accent-real', col.body); }
+    var fresh = [];
+    Object.keys(c.states || {}).forEach(function (state) {
+      c.states[state].forEach(function (file, i) {
+        var img = document.createElement('img');
+        img.setAttribute('alt', '');
+        img.setAttribute('data-state', state);
+        img.setAttribute('data-i', String(i));
+        fresh.push([img, packUrl(c, file)]);
+      });
+    });
+    var swap = function () {
+      if (mine !== packSeq) return;   // llegó otra carga después de esta: la de ahora es la que vale
+      packWait = false;
+      while (box.firstChild) box.removeChild(box.firstChild);   // las imágenes de la versión anterior se descartan
+      fresh.forEach(function (f) { box.appendChild(f[0]); });
+      showGif(shownMood());
+    };
+    if (!box.firstChild || !fresh.length) {   // nada que mantener a la vista mientras llega: se arma ya
+      while (box.firstChild) box.removeChild(box.firstChild);
+      fresh.forEach(function (f) { f[0].setAttribute('src', f[1]); box.appendChild(f[0]); });
+      return;
+    }
+    /* Ya hay un Buddy en pantalla: el nuevo se carga aparte y recién cuando llegó todo se cambia, de un golpe, sin un cuadro vacío.
+       Cada imagen termina con load o con error (un archivo que ya no está no deja a las viejas colgadas para siempre). */
+    packWait = true;
+    var left = fresh.length;
+    var one = function () { if (--left === 0) swap(); };
+    fresh.forEach(function (f) {
+      f[0].addEventListener('load', one);
+      f[0].addEventListener('error', one);
+      f[0].setAttribute('src', f[1]);
+    });
+  }
+
+  function showGif(mood) {
+    var c = view && view.character;
+    if (!c || !c.states) return;
+    /* un pack puede traer un acento por ánimo (nuestra extensión); si no, manda el color del cuerpo. `--accent` es el ánimo con que
+       Buddy se ve y `--accent-real` el que dice el servidor (lo que cuenta algo se tiñe de este; ver el CSS) */
+    var st = document.body.style, byMood = c.accents || {}, base = c.colors && c.colors.body;
+    var acc = byMood[mood] || base, real = byMood[curMood] || base;
+    if (acc) st.setProperty('--accent', acc);
+    if (real) st.setProperty('--accent-real', real);
+    /* qué estados hay y cuántas imágenes tiene cada uno. Con imágenes nuevas en camino (packWait) en la caja siguen las de la versión
+       anterior y se elige entre ELLAS, por su propio data-state y con la misma cadena de respaldo: un ánimo que cambia en esa espera
+       (un corazón que termina, un permiso que llega) se ve al instante, no recién cuando llega el pack nuevo */
+    var imgs = $('gif').children, have = new Map(), k, name;
+    if (packWait) {
+      for (k = 0; k < imgs.length; k++) {
+        name = imgs[k].getAttribute('data-state');
+        have.set(name, (have.get(name) || 0) + 1);
+      }
+    } else {
+      Object.keys(c.states).forEach(function (key) { have.set(key, c.states[key].length); });
+    }
+    if (!have.size) return;
+    var state = have.has(mood) ? mood : have.has('idle') ? 'idle' : have.keys().next().value;
+    var n = have.get(state);
+    var pick = n > 1 ? String(gifIdx % n) : '0';
+    for (k = 0; k < imgs.length; k++) {
+      imgs[k].classList.toggle('on', imgs[k].getAttribute('data-state') === state && imgs[k].getAttribute('data-i') === pick);
+    }
+  }
+
+  function pickScreen(v) {
+    if (v.pairing) return 'pair';
+    if (v.approvals && v.approvals.length) return 'ask';
+    /* Hermes habla por la red y no necesita ni al Mac ni a Bluetooth: un aviso vivo no se esconde tras "Esperando a Claude desktop" (la pantalla de
+       noche, con el Mac dormido, sería justo esa) ni tras "Bluetooth no está listo" (venza donde nadie lo ve, o despierte la pantalla hacia un error)
+       y, mientras dure, la pantalla principal lo muestra. Un Bluetooth caído sigue diciéndose: la píldora de arriba se pone roja y, sin avisos, vuelve la pantalla. */
+    if (!v.ble.ready && !noticesOf(v).length) return 'down';
+    return v.linked || noticesOf(v).length ? 'main' : 'wait';
+  }
+
+  /* al cambiar de ánimo Buddy aterriza como gelatina */
+  function land(mood) {
+    if (mood === lastMood) return;
+    var first = lastMood === '';
+    lastMood = mood;
+    if (first) return;
+    var g = document.querySelector('#pet .jelly');
+    if (!g) return;
+    g.classList.remove('land');
+    g.getBoundingClientRect();
+    g.classList.add('land');
+  }
+
+  function render() {
+    var b = document.body;
+    var v = view;
+    if (v) applyLang(v.lang);   // el idioma que dice el daemon; si cambió, todo lo que sigue se vuelve a pintar en él
+    if (!v) { clearTouch(); setAttr(b, 'data-screen', 'boot'); setAttr(b, 'data-mood', 'sleep'); setAttr(b, 'data-real', 'sleep'); paintDim(); return; }
+
+    var screen = pickScreen(v);
+    if (screen !== 'main') closeTask();   // un permiso siempre gana: el detalle se cierra y al volver está la lista
+    var mood = MOODS[v.mood] ? v.mood : 'idle';
+    if (screen === 'down' || screen === 'wait') mood = 'sleep';
+    setAttr(b, 'data-screen', screen);
+    curMood = mood;
+    if (screen === 'ask' || mood === 'attention') clearTouch();   // un permiso o un aviso gana al instante: ningún ánimo de toque ni su temporizador sobreviven
+    var sig = JSON.stringify(v.character || null);
+    if (sig !== packSig) { packSig = sig; loadPack(v.character || null); }
+    paintMood();
+    watchNotices(v, screen, mood);
+
+    /* barra de arriba */
+    var name = v.ble.name || 'Claude-····';
+    setText($('net-name'), name);
+    setAttr($('net'), 'data-state', !v.ble.ready && v.ble.reason && v.ble.reason !== 'starting' ? 'down' : v.linked ? 'linked' : 'ready');
+    $('net-lock').style.display = v.ble.secure ? '' : 'none';
+    $('net-open').style.display = v.ble.secure ? 'none' : '';
+    setText($('clock'), v.clock || localClock());
+    renderPlate(v, mood);
+
+    if (screen === 'main') renderMain(v);
+    else if (screen === 'wait') setText($('wait-name'), name);
+    else if (screen === 'down') renderDown(v);
+    else if (screen === 'pair') renderPair(v);
+    else if (screen === 'ask') renderAsk(v);
+
+    /* limpiar lo que ya no está pendiente */
+    var live = {};
+    (v.approvals || []).forEach(function (a) { live[a.key] = true; });
+    Object.keys(seen).forEach(function (k) { if (!live[k]) delete seen[k]; });
+    Object.keys(sending).forEach(function (k) { if (!live[k]) delete sending[k]; });
+    paintDim();
+  }
+
+  function renderPlate(v, mood) {
+    var p = v.pet || {};
+    setText($('pet-name'), p.name || 'Buddy');
+    setText($('pet-owner'), p.owner ? t('plate.owner', { owner: p.owner }) : '');
+    setText($('mood'), t(MOODS[mood]));
+    setText($('pet-level'), t('plate.level', { n: p.level || 0 }));
+    $('xp').style.transform = 'scaleX(' + Math.max(0, Math.min(1, p.xp || 0)) + ')';
+  }
+
+  /* ---------------- hilos: las conversaciones vivas; tocar una fila abre lo que dijo ---------------- */
+  var DETAIL_MS = 25000;    // sin tocar, el detalle se cierra solo
+  var TAP_GUARD_MS = 350;   // un Volver apenas abierto el detalle es el rebote del dedo que abrió: no cierra
+  var MAX_HOPS = 4;         // cuántos padres se siguen para hallar de quién cuelga un hilo
+  var MAX_RUNS_DRAWN = 5;   // corridas (censo) que se dibujan a lo sumo; las demás van en la línea "+K más"
+  var QUIET_S = 120;        // una corrida que lleva tanto sin escribir nada está "callada"
+  /* Los ids y los nombres de grupo vienen de sesiones de afuera ("constructor" y "__proto__" son nombres válidos):
+     todo lo que se indexa por ellos es un Map, nunca un {}. */
+  var rank = new Map(), rankSeq = 0;      // id -> orden de llegada
+  var grank = new Map(), grankSeq = 0;    // grupo -> orden de llegada
+  var openId = '', openSnap = null, openedAt = 0, closeTimer = 0;
+  var openNoteId = '', noteSnap = null;   // el aviso abierto en el mismo detalle (ver "avisos"): uno u otro, nunca los dos
+
+  function threadLabel(th) { return String(th.title || th.project || t('thread.fallback')); }
+  function groupName(th) { return String(th.group || 'Terminal'); }   // sin grupo: una sesión de terminal que Claude desktop no conoce (la clave; lo que se lee es groupLabel)
+  /* lo que se lee de un grupo: "Terminal" y "Corridas" (el censo de la Mac lo manda en español) se dicen en el idioma de la pantalla; los demás son de quien los puso */
+  function groupLabel(g) { return g === 'Corridas' ? t('group.runs') : g === 'Terminal' ? t('group.terminal') : g; }
+  function whole(n) { n = Math.floor(Number(n)); return isFinite(n) && n > 0 ? n : 0; }   // un conteo del servidor, nunca negativo ni NaN
+
+  /* Una corrida es una fila del censo de la Mac (un claude -p o un trabajo de la lista del dueño), no una conversación: lleva
+     `elapsed` (cuánto lleva corriendo) y, si se sabe, `idle` (cuánto lleva sin escribir nada), los dos en segundos. */
+  function isRun(t) { return t.source === 'census'; }
+  function idleOf(t) { return isRun(t) && typeof t.idle === 'number' && isFinite(t.idle) ? Math.max(0, t.idle) : -1; }
+  function spanText(s) {   // "9 min", y desde las dos horas "3 h" o "2 d": nadie lee "43200 min"
+    var m = Math.floor(s / 60);
+    return m < 120 ? t('span.min', { n: m }) : m < 2880 ? t('span.h', { n: Math.floor(m / 60) }) : t('span.d', { n: Math.floor(m / 1440) });
+  }
+  function quietText(th) { return idleOf(th) >= QUIET_S ? t('row.quiet', { span: spanText(idleOf(th)) }) : ''; }
+  function clockText(t) { return fmtAge(isRun(t) ? whole(t.elapsed) * 1000 : t.age * 1000); }
+
+  /* Lo que se dibuja: las corridas pasadas de MAX_RUNS_DRAWN se dejan fuera (el servidor ya las corta, pero la página no confía
+     en eso) y se cuentan en `cut`, que se suma al "+K más". Siempre la misma lista para todo lo que llama a arrange(). */
+  function shownTasks(v) {
+    var runs = 0, cut = 0, keep = [];
+    ((v && v.tasks) || []).forEach(function (t) {
+      if (isRun(t) && ++runs > MAX_RUNS_DRAWN) cut += 1; else keep.push(t);
+    });
+    return { tasks: keep, cut: cut };
+  }
+
+  /* A quién cuelga un hilo: el más alto de sus padres que también está en la lista. Un ciclo (A hijo de B, B hijo de A) o una
+     cadena de más de MAX_HOPS no cuelga nada: ese hilo queda como una fila corriente. */
+  function rootOf(t, byId) {
+    var cur = t, walked = new Set([t.id]);
+    for (var hops = 0; hops < MAX_HOPS; hops++) {
+      var p = cur.parent ? byId.get(cur.parent) : null;
+      if (!p) return cur;
+      if (walked.has(p.id)) return t;
+      walked.add(p.id);
+      cur = p;
+    }
+    return cur.parent && byId.get(cur.parent) ? t : cur;
+  }
+
+  /* El orden de la pantalla no depende de lo que cambie en el servidor (estado, edad, orden de llegada): una fila cambia de
+     aspecto cuando cambia su estado, no de lugar, y nada salta bajo el dedo. Cada hilo y cada grupo tiene el lugar en que
+     se vio por primera vez (en el primer dibujo, el orden del servidor: trabajando primero, lo más nuevo arriba); lo que
+     llega después va al final de su grupo, y un grupo nuevo al final de la lista. Un hilo que otro lanzó va justo debajo
+     de su padre, dentro del grupo de su padre. Devuelve el orden plano y, por id, de quién cuelga cada fila. */
+  function arrange(tasks) {
+    var byId = new Map();
+    tasks.forEach(function (t) { byId.set(t.id, t); });
+    var at = new Map();
+    tasks.forEach(function (t) { var r = rootOf(t, byId); at.set(t.id, { root: r, kid: r !== t }); });
+    tasks.forEach(function (t) { if (!rank.has(t.id)) rank.set(t.id, ++rankSeq); });
+    tasks.forEach(function (t) {
+      var g = groupName(at.get(t.id).root);
+      if (!grank.has(g)) grank.set(g, ++grankSeq);
+    });
+    var liveIds = new Set(), liveGroups = new Set();
+    tasks.forEach(function (t) { liveIds.add(t.id); liveGroups.add(groupName(at.get(t.id).root)); });
+    rank.forEach(function (n, id) { if (!liveIds.has(id)) rank.delete(id); });
+    grank.forEach(function (n, g) { if (!liveGroups.has(g)) grank.delete(g); });
+    var order = tasks.slice().sort(function (a, b) {
+      var ia = at.get(a.id), ib = at.get(b.id);
+      return (grank.get(groupName(ia.root)) - grank.get(groupName(ib.root)))
+        || (rank.get(ia.root.id) - rank.get(ib.root.id))
+        || (Number(ia.kid) - Number(ib.kid))
+        || (rank.get(a.id) - rank.get(b.id));
+    });
+    return { order: order, at: at };
+  }
+  function stableOrder(tasks) { return arrange(tasks).order; }
+
+  function rowText(th) {
+    var r = ((th.tool || '') + ' ' + (th.what || '')).trim();
+    if (isRun(th)) return quietText(th) || r;   // una corrida callada dice eso en vez de lo último que hacía
+    return th.state === 'idle' ? (r ? t('row.done.with', { what: r }) : t('row.done')) : r;
+  }
+  function makeRow(id) {
+    var li = $('row-proto').content.firstElementChild.cloneNode(true);
+    li.setAttribute('data-id', id);
+    return li;
+  }
+  function makeCaption(name) {
+    var li = document.createElement('li');
+    li.className = 'grp';
+    li.setAttribute('data-g', name);
+    return li;
+  }
+  /* El rótulo de un grupo hecho solo de corridas dice cuántas hay vivas en total ("Corridas · 7"), también las que no caben en
+     la lista. Esa cuenta es la del servidor (`census_total`) solo si ningún otro grupo tiene corridas; si hay dos grupos con
+     corridas nadie sabe cómo se reparten y cada uno cuenta las que dibuja. Un grupo con corridas y hilos revueltos no lleva cuenta. */
+  function groupLabels(lay, total) {
+    var made = new Map(), withRuns = 0;
+    lay.order.forEach(function (t) {
+      var g = groupName(lay.at.get(t.id).root), c = made.get(g);
+      if (!c) { c = { runs: 0, other: 0 }; made.set(g, c); }
+      if (isRun(t)) c.runs += 1; else c.other += 1;
+    });
+    made.forEach(function (c) { if (c.runs) withRuns += 1; });
+    var out = new Map();
+    made.forEach(function (c, g) {
+      out.set(g, c.runs && !c.other ? groupLabel(g) + ' · ' + (withRuns === 1 ? Math.max(total, c.runs) : c.runs) : groupLabel(g));
+    });
+    return out;
+  }
+  /* Las filas y los rótulos de grupo se reutilizan por clave: el scroll y un dedo a medio tocar sobreviven a cada latido del
+     servidor. Todo hijo sin data-id, data-g, data-n, data-notes ni data-more (las líneas sueltas del protocolo, cuando todavía no había
+     hilos) se descarta. Arriba de todo, si hay, el grupo de avisos (su rótulo y hasta 3 filas, cada una con su clave: un aviso y un hilo
+     pueden llamarse igual). Al final, si hay más filas de las que se dibujan, "+K más" (K = more): una línea que no se toca. */
+  function syncRows(list, lay, total, more, notes) {
+    list.classList.add('tasks');
+    list.setAttribute('data-sig', '@tasks');
+    var have = new Map();
+    Array.prototype.slice.call(list.children).forEach(function (el) {
+      var id = el.getAttribute('data-id'), g = el.getAttribute('data-g'), n = el.getAttribute('data-n');
+      var key = id !== null ? 'i:' + id : g !== null ? 'g:' + g : n !== null ? 'n:' + n : el.hasAttribute('data-notes') ? 'notes'
+        : el.hasAttribute('data-more') ? 'more' : null;
+      if (key === null || have.has(key)) list.removeChild(el); else have.set(key, el);
+    });
+    var labels = groupLabels(lay, total);
+    var want = [], prev = null;
+    if (notes && notes.length) {
+      var head = have.get('notes'); have.delete('notes');
+      if (!head) { head = document.createElement('li'); head.className = 'grp'; head.setAttribute('data-notes', ''); }
+      setText(head, t('group.notices', { n: notes.length }));
+      want.push(head);
+      notes.forEach(function (n) {
+        var row = have.get('n:' + n.id); have.delete('n:' + n.id);
+        if (!row) row = makeNote(n.id);
+        paintNote(row, n);
+        want.push(row);
+      });
+    }
+    lay.order.forEach(function (t) {
+      var inf = lay.at.get(t.id), g = groupName(inf.root);
+      if (g !== prev) {
+        prev = g;
+        var cap = have.get('g:' + g); have.delete('g:' + g);
+        if (!cap) cap = makeCaption(g);
+        setText(cap, labels.get(g));
+        want.push(cap);
+      }
+      var li = have.get('i:' + t.id); have.delete('i:' + t.id);
+      if (!li) li = makeRow(t.id);
+      li.classList.toggle('idle', t.state === 'idle');
+      li.classList.toggle('kid', inf.kid);
+      li.classList.toggle('titled', isRun(t) ? !rowText(t) : !!t.title);   // una corrida con algo que decir comparte la fila con su nombre; sin nada, el nombre se queda con todo
+      li.classList.toggle('quiet', !!quietText(t));
+      var k = li.firstChild.children;
+      setText(k[0], threadLabel(t)); setText(k[1], rowText(t)); setText(k[3], clockText(t));
+      want.push(li);
+    });
+    if (more > 0) {
+      var tail = have.get('more'); have.delete('more');
+      if (!tail) { tail = document.createElement('li'); tail.className = 'more'; tail.setAttribute('data-more', ''); }
+      setText(tail, t('row.more', { n: more }));
+      want.push(tail);
+    }
+    have.forEach(function (el) { list.removeChild(el); });
+    want.forEach(function (el, i) { if (list.children[i] !== el) list.insertBefore(el, list.children[i] || null); });
+  }
+  function bumpDetail() { clearTimeout(closeTimer); closeTimer = setTimeout(closeTask, DETAIL_MS); }
+  function openTask(id) {
+    openId = id; openSnap = null; openedAt = performance.now(); bumpDetail();
+    noteGone();
+    $('feed').classList.add('reading');
+    $('tv-said').scrollTop = 0;
+    if (view) paintDetail(stableOrder(shownTasks(view).tasks));
+  }
+  function closeTask() {
+    openId = ''; openSnap = null; clearTimeout(closeTimer);
+    noteGone();
+    $('feed').classList.remove('reading');
+  }
+  function backTask() { if (performance.now() - openedAt >= TAP_GUARD_MS) closeTask(); }
+  /* todo con textContent; las comillas son CSS, no parte del texto */
+  function paintDetail(order) {
+    if (!openId) return;
+    var th = null;
+    (order || []).forEach(function (x) { if (x.id === openId) th = x; });
+    if (th) { openSnap = Object.assign({}, th); openSnap.at = Date.now() - th.age * 1000; openSnap.seen = Date.now(); }
+    else if (openSnap) {   // se fue de la lista: queda lo último que se supo, y sus relojes siguen corriendo
+      th = Object.assign({}, openSnap);
+      var gone = Math.floor((Date.now() - openSnap.seen) / 1000);
+      th.age = Math.floor((Date.now() - openSnap.at) / 1000);
+      if (isRun(th)) { th.elapsed = whole(th.elapsed) + gone; if (idleOf(th) >= 0) th.idle = th.idle + gone; }
+    }
+    if (!th) { closeTask(); return; }
+    var label = threadLabel(th), nm = $('tv-name');
+    if (nm.textContent !== label) {
+      setText(nm, label);
+      /* cabe en una línea a 30px? si no, baja a 21px y se deja leer en dos (se mide con la tipografía que de verdad hay) */
+      $('task-view').classList.remove('long');
+      if (nm.scrollWidth > nm.clientWidth) $('task-view').classList.add('long');
+    }
+    setText($('tv-age'), isRun(th) ? t('tv.for', { age: clockText(th) }) : t('ago', { age: clockText(th) }));   // una corrida cuenta desde que arrancó, un hilo desde que habló
+    setText($('tv-did'), groupLabel(groupName(th)) + ' · ' + (rowText(th) || (th.state === 'idle' ? t('row.done') : t('row.working'))));
+    var said = th.said || '';
+    $('tv-said').classList.toggle('none', !said);
+    setText($('tv-pre'), said && th.state !== 'idle' ? t('tv.before') : '');
+    setText($('tv-text'), said || (isRun(th) ? runNote(th) : th.state === 'idle' ? t('tv.none.idle') : t('tv.none.working')));
+  }
+  /* sin nada que citar, una corrida cuenta su estado (siempre trabaja) y lo que sabe de su silencio */
+  function runNote(th) {
+    var idle = idleOf(th);
+    return idle < 0 ? t('run.note.unknown')
+      : idle >= QUIET_S ? t('run.note.quiet', { span: spanText(idle) })
+      : t('run.note.talking', { age: fmtAge(idle * 1000) });
+  }
+  $('feed-list').addEventListener('click', function (e) {
+    var li = e.target.closest ? e.target.closest('li.task') : null;   // un rótulo de grupo no es un hilo: tocarlo no abre nada
+    if (li) { openTask(li.getAttribute('data-id')); return; }
+    var nt = e.target.closest ? e.target.closest('li.notice') : null;
+    if (nt) openNotice(nt.getAttribute('data-n'));
+  });
+  $('tv-back').addEventListener('click', backTask);
+  ['pointerdown', 'scroll'].forEach(function (ev) { $('tv-said').addEventListener(ev, bumpDetail, { passive: true }); });
+
+  function renderMain(v) {
+    var p = v.pet || {}, s = v.sessions || {};
+    setText($('n-total'), String(s.total || 0));
+    setText($('n-running'), String(s.running || 0));
+    setText($('n-waiting'), String(s.waiting || 0));
+    $('t-waiting').classList.toggle('hot', (s.waiting || 0) > 0);
+    var msg = humanize(s.msg);
+    var entries = [];
+    (s.entries || []).forEach(function (e) {
+      var t = humanize(e);
+      if (t && t !== msg && entries.indexOf(t) < 0) entries.push(t);
+    });
+    /* el Mac alterna "(called X)" y "(no messages)" cada pocos segundos: lo último que dijo se queda un rato */
+    var now = Date.now();
+    if (msg || entries.length) {
+      feedKeep = { msg: msg, entries: entries, at: now };
+    } else if (now - feedKeep.at < FEED_STICKY_MS && (feedKeep.msg || feedKeep.entries.length)) {
+      msg = feedKeep.msg; entries = feedKeep.entries;
+    }
+    /* con el hook del Mac, Buddy sabe qué conversaciones están vivas y qué hace cada una: eso gana sobre el mensaje del protocolo.
+       El titular cuenta TODO lo que trabaja (`working_total`, tomado antes del corte de la lista), no solo las filas dibujadas;
+       sin ese campo (un daemon viejo) cuenta las filas. Lo que no cabe, y lo que la página misma deja fuera, va en "+K más". */
+    var shown = shownTasks(v), tasks = shown.tasks;
+    var notes = orderNotes(noticesOf(v));   // los avisos de Hermes, arriba de los hilos (ver "avisos")
+    var list = $('feed-list');
+    var order = [];
+    if (tasks.length || notes.length) {
+      var lay = arrange(tasks);
+      order = lay.order;
+      var working = typeof v.working_total === 'number' ? whole(v.working_total)
+        : tasks.filter(function (t) { return t.state === 'working'; }).length;
+      if (tasks.length) msg = working === 0 ? t('feed.idle') : tn(working, 'feed.tasks.one', 'feed.tasks.other');
+      else msg = tn(notes.length, 'feed.notices.one', 'feed.notices.other');   // sin hilos, el titular cuenta los avisos
+      syncRows(list, lay, whole(v.census_total), whole(v.tasks_more) + shown.cut, notes);
+      entries = ['_'];  // hay lista: no es estado vacío
+    } else if (list.classList.contains('tasks')) {
+      list.classList.remove('tasks');   // se fueron los hilos: la lista vuelve a ser la del protocolo
+      list.removeAttribute('data-sig');
+      while (list.firstChild) list.removeChild(list.firstChild);
+    }
+    paintDetail(order);
+    paintNotice(notes);
+    setText($('feed-msg'), msg);
+    $('feed-msg').style.display = msg ? '' : 'none';
+    if (!tasks.length && !notes.length) {
+      var sig = entries.join('\n');
+      if (list.getAttribute('data-sig') !== sig) {
+        list.setAttribute('data-sig', sig);
+        while (list.firstChild) list.removeChild(list.firstChild);
+        entries.forEach(function (e) {
+          var li = document.createElement('li'); li.textContent = e; list.appendChild(li);
+        });
+      }
+    }
+    /* sin novedades, Buddy igual dice algo con lo que sabe: cuántas sesiones hay y si hacen algo */
+    var empty = !entries.length && !msg;
+    $('s-main').classList.toggle('quiet', empty);
+    $('feed-empty').style.display = empty ? '' : 'none';
+    $('feed-detail').style.display = empty ? '' : 'none';
+    if (empty) {
+      var total = s.total || 0, r = s.running || 0, w = s.waiting || 0;
+      setText($('feed-empty'), w > 0 ? t('empty.waiting') : r > 0 ? t('empty.running') : total > 0 ? t('empty.calm') : t('empty.here'));
+      setText($('feed-detail'),
+        w > 0 ? t('detail.waiting')
+        : total === 0 ? t('detail.none')
+        : r > 0 ? tn(r, 'detail.running.one', 'detail.running.other')
+        : tn(total, 'detail.open.one', 'detail.open.other'));
+    }
+    setText($('f-tokens'), fmtCount(s.tokens_today));
+    setText($('f-ok'), String(p.approvals || 0));
+    setText($('f-no'), String(p.denials || 0));
+  }
+
+  /* ---------------- avisos ----------------
+     Hermes deja avisos cortos en la pantalla (POST /notice del daemon): view.notices trae hasta 3, los más nuevos primero, cada uno
+     {id, title, body?, kind, source, age, rev}. Viven en el mismo lugar que los hilos y se leen igual:
+       - un grupo "Avisos · N" arriba de la lista, con una fila de 44px por aviso (campana, título, hace cuánto llegó)
+       - tocar una fila abre el detalle de siempre (#task-view): título, "Aviso · de <quién> · hace <cuánto>", el cuerpo, Volver y Listo
+       - Listo avisa al daemon (POST /dismiss, sin esperar) y saca la fila al instante; el siguiente estado del daemon lo confirma
+       - un aviso nuevo o cambiado (otro rev) pone a Buddy en 'attention' 4 s por el mismo camino que los toques; nada del texto de
+         estado cambia, y no se repite con el primer estado tras cargar la página ni mientras la pantalla está oscura o pide un permiso
+     Todo es texto (textContent); los ids vienen de afuera y solo se usan como claves de un Map. Un permiso (ask) siempre gana: la lista no
+     se ve y el aviso espera. De noche, con la pantalla tenue, #dim se queda con todo toque (aquí además nada responde si se cuela uno). */
+  var NOTICE_MAX = 3;           // los que el daemon deja vivos; la página tampoco dibuja más
+  var NOTICE_ATTN_MS = 4000;    // cuánto se ve a Buddy atento por un aviso nuevo
+  var noticeHidden = new Map(); // id -> rev del aviso que Listo sacó: se esconde hasta que el daemon lo suelte (o lo cambie)
+  var noticeRank = new Map(), noticeSeq = 0;   // id -> orden de llegada (como los hilos: una fila no cambia de lugar)
+  var noticeSeen = new Map();   // id -> rev que ya se vio desde que cargó la página: lo que no está acá es nuevo
+  var noticeArmed = false;      // ya hubo un primer estado (ese no anima: los avisos que ya estaban no son noticia)
+
+  /* lo que manda el daemon, aceptado con desconfianza: a lo sumo 3, cada id una sola vez, la clase solo ok o warn (si no, info) */
+  function rawNotices(v) {
+    var out = [], ids = new Set();
+    ((v && Array.isArray(v.notices)) ? v.notices : []).forEach(function (n) {
+      if (!n || typeof n !== 'object' || typeof n.id !== 'string' || !n.id || ids.has(n.id) || out.length >= NOTICE_MAX) return;
+      ids.add(n.id);
+      out.push({
+        id: n.id, title: String(typeof n.title === 'string' && n.title ? n.title : t('notice.label')), body: typeof n.body === 'string' ? n.body : '',
+        kind: n.kind === 'ok' || n.kind === 'warn' ? n.kind : 'info', source: typeof n.source === 'string' && n.source ? n.source : 'hermes',
+        age: whole(n.age), rev: whole(n.rev)
+      });
+    });
+    return out;
+  }
+  function noticesOf(v) {
+    return rawNotices(v).filter(function (n) { return noticeHidden.get(n.id) !== n.rev; });
+  }
+  function orderNotes(notes) {
+    notes.forEach(function (n) { if (!noticeRank.has(n.id)) noticeRank.set(n.id, ++noticeSeq); });
+    var live = new Set();
+    notes.forEach(function (n) { live.add(n.id); });
+    noticeRank.forEach(function (r, id) { if (!live.has(id)) noticeRank.delete(id); });
+    return notes.slice().sort(function (a, b) { return noticeRank.get(a.id) - noticeRank.get(b.id); });
+  }
+  function makeNote(id) {
+    var li = $('note-proto').content.firstElementChild.cloneNode(true);
+    li.setAttribute('data-n', id);
+    return li;
+  }
+  function paintNote(li, n) {
+    li.classList.toggle('ok', n.kind === 'ok');
+    li.classList.toggle('warn', n.kind === 'warn');
+    var k = li.firstChild.children;   // campana, título, marca ok, marca warn, edad, flecha
+    setText(k[1], n.title); setText(k[4], fmtAge(n.age * 1000));
+  }
+
+  /* El detalle de un aviso comparte #task-view con los hilos y sus guardas: Volver y Listo ignoran los primeros 350 ms (el rebote del
+     dedo que abrió la fila), se cierra solo a los 25 s sin toque y un permiso lo cierra (render llama a closeTask). Abrirlo no toca el
+     aviso: sigue en la lista hasta que Listo lo saque, Hermes lo retire o venza. */
+  function noticeLocked() { return isAsking() || dimNow(performance.now()); }   // con un permiso o con la pantalla oscura, ni un toque que se cuele abre o saca nada
+  function openNotice(id) {
+    if (noticeLocked()) return;
+    closeTask();
+    openNoteId = id; noteSnap = null; openedAt = performance.now(); bumpDetail();
+    $('task-view').classList.add('notice');
+    $('feed').classList.add('reading');
+    $('tv-said').scrollTop = 0;
+    if (view) paintNotice(noticesOf(view));
+  }
+  /* se suelta el aviso del detalle: vuelve a ser el detalle de un hilo (o nada) */
+  function noteGone() {
+    if (!openNoteId && !$('task-view').classList.contains('notice')) return;
+    openNoteId = ''; noteSnap = null;
+    $('task-view').classList.remove('notice', 'long', 'tall');
+    setText($('tv-name'), '');   // el próximo título se vuelve a medir
+  }
+  function paintNotice(notes) {
+    if (!openNoteId) return;
+    var n = null;
+    (notes || []).forEach(function (x) { if (x.id === openNoteId) n = x; });
+    if (n) { noteSnap = Object.assign({}, n); noteSnap.at = Date.now() - n.age * 1000; }
+    else if (noteSnap) {   // ya no está (venció o Hermes lo retiró): queda lo último que se supo y su reloj sigue corriendo
+      n = Object.assign({}, noteSnap);
+      n.age = Math.floor((Date.now() - noteSnap.at) / 1000);
+    }
+    if (!n) { closeTask(); return; }
+    var nm = $('tv-name'), tv = $('task-view');
+    if (nm.textContent !== n.title) {
+      setText(nm, n.title);
+      /* con dos botones al lado el título se mide con la tipografía que de verdad hay: una línea de 30px, dos de 21px o, si ni así, hasta
+         cinco de 19px. (Las letras de Nunito Sans se salen unos 3px de su línea: "sobra una línea" es más de media línea de más.) */
+      tv.classList.remove('long', 'tall');
+      if (nm.scrollWidth > nm.clientWidth) tv.classList.add('long');
+      if (tv.classList.contains('long') && nm.scrollHeight > nm.clientHeight + 11) tv.classList.add('tall');
+    }
+    setText($('tv-age'), t('notice.label'));
+    setText($('tv-did'), t('notice.from', { source: n.source }));
+    setText($('tv-na'), t('ago', { age: fmtAge(n.age * 1000) }));
+    $('tv-said').classList.toggle('none', !n.body);
+    setText($('tv-pre'), '');
+    setText($('tv-text'), n.body || t('notice.nodetail'));
+  }
+  $('tv-done').addEventListener('click', doneNotice);
+  function doneNotice() {
+    if (!openNoteId || noticeLocked() || performance.now() - openedAt < TAP_GUARD_MS) return;
+    var id = openNoteId;
+    noticeHidden.set(id, noteSnap ? noteSnap.rev : 0);
+    closeTask();
+    sendDismiss(id);
+    render();   // la fila se va ya; el estado que sigue del daemon dice lo mismo
+  }
+  /* Mejor esfuerzo, sin esperar: si no llega (sin conexión, otro rechazo) el aviso vuelve a la lista, que es lo que de verdad pasó */
+  function sendDismiss(id) {
+    if (DEMO) return;   // la vista previa no habla con nadie
+    var back = function () { if (noticeHidden.delete(id) && view) render(); };
+    try {
+      fetch('/dismiss', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Buddy-Token': TOKEN }, body: JSON.stringify({ id: id }) })
+        .then(function (r) { if (!r.ok) back(); }, back);
+    } catch (err) { back(); }
+  }
+
+  /* Un aviso nuevo (un id que no se había visto) o cambiado (su rev subió) pone a Buddy atento 4 s. Lo que ya estaba cuando cargó la página
+     no cuenta, ni lo que llega con la pantalla oscura (al despertar no se anima: ya se vio), ni lo que llega con un permiso o con un Buddy que
+     ya está atento. Con el código de emparejar en pantalla (la lista no se ve) no se anima nada y el aviso queda sin ver: se anima cuando vuelve
+     la lista. Un id que se fue (Listo, venció, Hermes lo retiró) se olvida, así que el mismo id de nuevo vuelve a ser un aviso nuevo. */
+  function watchNotices(v, screen, mood) {
+    var all = new Map();
+    rawNotices(v).forEach(function (n) { all.set(n.id, n.rev); });
+    noticeHidden.forEach(function (rev, id) { if (all.get(id) !== rev) noticeHidden.delete(id); });
+    var first = !noticeArmed, hidden = !first && screen !== 'main' && screen !== 'ask';
+    var fresh = false, now = new Map();
+    noticesOf(v).forEach(function (n) {
+      var before = noticeSeen.get(n.id);
+      if (before === undefined || n.rev > before) fresh = true;
+      if (!hidden) now.set(n.id, n.rev);
+      else if (before !== undefined) now.set(n.id, before);   // lo que ya se vio sigue visto; lo nuevo espera a que se vea la lista
+    });
+    noticeSeen = now;
+    noticeArmed = true;
+    if (first || hidden || !fresh || screen === 'ask' || mood === 'attention' || dimNow(performance.now())) return;
+    setTouch('attention', NOTICE_ATTN_MS);
+  }
+  /* cada vista previa parte de cero (como la noche): nada de lo que se vio o se sacó en la anterior vale */
+  function noticeReset() { noticeHidden.clear(); noticeRank.clear(); noticeSeq = 0; noticeSeen = new Map(); noticeArmed = false; }
+
+  function renderDown(v) {
+    var starting = v.ble.reason === 'starting' || !v.ble.reason;
+    setText($('down-title'), t(starting ? 'down.title.starting' : 'down.title.notready'));
+    $('down-reason').style.display = starting ? 'none' : '';
+    setText($('down-reason'), starting ? '' : v.ble.reason);
+    setText($('down-note'), t(starting ? 'down.note.starting' : 'down.note.retry'));
+  }
+
+  function renderPair(v) {
+    var code = String(v.pairing.code || '');
+    var entered = v.pairing.entered || 0;
+    for (var i = 0; i < digitEls.length; i++) {
+      setText(digitEls[i], code.charAt(i) || '·');
+      digitEls[i].classList.toggle('done', i < entered);
+    }
+    setText($('pair-sub'), entered > 0 ? t('pair.progress', { n: entered, total: code.length }) : '');
+  }
+
+  function renderAsk(v) {
+    var list = v.approvals;
+    var a = list[0];
+    var now = Date.now();
+    if (!seen[a.key]) seen[a.key] = now;
+    if (curKey !== a.key) {
+      curKey = a.key;
+      holdUntil = Math.max(holdUntil, now + ARM_MS);
+      $('hint').scrollTop = 0;
+    }
+    var question = isQuestion(a);
+    $('s-ask').classList.toggle('question', question);
+    var toolText = question ? t('ask.question') : (a.source && a.source !== 'claude' ? a.source + ' · ' : '') + (a.tool || t('ask.default'));
+    setText($('tool'), toolText);
+    var rule = !question && a.always ? a.always : '';
+    setText($('always-rule'), rule);
+    $('always-note').style.display = rule ? '' : 'none';
+    $('s-ask').classList.toggle('always', !!rule);
+    $('tool').classList.toggle('long', toolText.length > 12);
+    var hint = a.hint || '';
+    /* sin pista (una pregunta, o una herramienta sin texto), al menos el contexto: lo último que dijo la sesión */
+    var ctx = '';
+    if (!hint) {
+      var lines = [];
+      ((v.sessions && v.sessions.entries) || []).forEach(function (e) {
+        var t = humanize(e);
+        if (t && lines.indexOf(t) < 0) lines.push(t);
+      });
+      ctx = lines.join('\n');
+    }
+    setText($('hint'), hint || ctx || (question ? t('hint.question') : t('hint.none')));
+    $('hint').classList.toggle('long', hint.length > 220);
+    $('hint').classList.toggle('ctx', !hint && !!ctx);
+    $('hint').classList.toggle('empty', !hint && !ctx);
+    setText($('queue'), list.length > 1 ? t('ask.queue', { n: list.length - 1 }) : '');
+    $('queue').style.display = list.length > 1 ? '' : 'none';
+    paintAsk();
+    clearTimeout(armTimer);
+    var wait = holdUntil - Date.now();
+    if (wait > 0) armTimer = setTimeout(paintAsk, wait + 20);
+  }
+
+  function paintAsk() {
+    var a = current();
+    if (!a) return;
+    var s = sending[a.key] || '';
+    var armed = Date.now() >= holdUntil;
+    var cls = 'btns' + (a.always ? ' three' : '') + (!armed ? ' hold' : '') + (s ? ' busy' : '');
+    setAttr($('btns'), 'class', cls);
+    $('b-no').classList.toggle('chosen', s === 'deny');
+    $('b-ok').classList.toggle('chosen', s === 'once');
+    $('b-always').classList.toggle('chosen', s === 'always');
+    setText($('b-no-t'), t(s === 'deny' ? 'btn.sending' : 'btn.deny'));
+    setText($('b-ok-t'), t(s === 'once' ? 'btn.sending' : 'btn.once'));
+    setText($('b-always-t'), t(s === 'always' ? 'btn.sending' : 'btn.always'));
+    var who = a.source === 'cli' ? 'Claude Code' : a.source && a.source !== 'claude' ? a.source.charAt(0).toUpperCase() + a.source.slice(1) : 'Claude';
+    setText($('age'), t(isQuestion(a) ? 'ask.asks' : 'ask.request', { who: who }) + (seen[a.key] ? ' · ' + t('ago', { age: fmtAge(Date.now() - seen[a.key]) }) : ''));
+  }
+
+  /* ---------------- decidir ---------------- */
+  var flashTimer = 0, toastTimer = 0;
+
+  function flash(kind) {
+    var f = $('flash');
+    f.className = 'flash on ' + (kind === 'deny' ? 'no' : 'ok');
+    setText($('flash-t'), t(kind === 'deny' ? 'flash.denied' : kind === 'always' ? 'flash.always' : 'flash.approved'));
+    holdUntil = Math.max(holdUntil, Date.now() + 900 + ARM_MS);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { f.className = 'flash'; }, 850);
+  }
+
+  function toast(text) {
+    var t = $('toast');
+    setText(t, text);
+    t.className = 'on';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.className = ''; }, 2600);
+  }
+
+  function decide(kind) {
+    var a = current();
+    if (!a || sending[a.key] || Date.now() < holdUntil || (kind === 'always' && !a.always)) return;
+    var key = a.key;
+    sending[key] = kind;
+    paintAsk();
+    if (DEMO) {
+      setTimeout(function () { delete sending[key]; flash(kind); demoNext(true); }, 250);
+      return;
+    }
+    fetch('/decide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Buddy-Token': TOKEN },
+      body: JSON.stringify({ key: key, decision: kind })
+    }).then(function (r) {
+      if (r.ok) { flash(kind); return; }
+      delete sending[key];
+      if (r.status === 409) toast(t('toast.resolved'));
+      else if (r.status === 403) { toast(t('toast.reload')); setTimeout(function () { location.reload(); }, 800); }
+      else toast(t('toast.failed', { status: r.status }));
+    }).catch(function () {
+      delete sending[key];
+      toast(t('offline.title'));
+    }).then(paintAsk);
+  }
+
+  $('b-ok').addEventListener('click', function () { decide('once'); });
+  $('b-no').addEventListener('click', function () { decide('deny'); });
+  $('b-always').addEventListener('click', function () { decide('always'); });
+
+  /* ---------------- Buddy al tacto ----------------
+     Tocar a Buddy le cambia el ánimo un rato. Es solo de la página: nada viaja al servidor, no se guarda y no da experiencia. Lo
+     que Buddy muestra es el ánimo del toque si hay uno, si no el del servidor (`curMood`); la píldora, el titular y los contadores
+     siguen diciendo lo que dice el servidor: el toque cambia cómo luce Buddy y nunca lo que se cuenta.
+       - dormido: el primer toque lo despierta ('idle'); los que caen con esos ojos abiertos cuentan como corazones
+       - despierto (cualquier ánimo menos attention): un toque pone 'heart' y otro toque reinicia la cuenta
+       - cinco toques que reaccionaron en 2 s (ventana que se corre) lo marean ('dizzy'); mientras dura ningún toque cuenta
+       - al terminar vuelve el ánimo que dice el servidor en ESE momento, no el que había al tocar
+       - con un permiso en pantalla (o antes del primer estado) nada responde, y si llega uno todo se cancela al instante
+       - con attention o mareado no juega ni cuenta el toque, pero el dedo se siente: responde el mismo eco de las partes muertas
+       - un aviso nuevo de Hermes pone 'attention' 4 s por este mismo camino (lo arma el bloque de los avisos con setTouch)
+     Hay un solo temporizador y siempre se apaga antes de armar otro. */
+  var WAKE_MS = 2500;         // cuánto queda despierto tras el toque que lo despertó
+  var HEART_MS = 2500;        // cuánto dura el corazón; cada toque nuevo lo vuelve a contar desde cero
+  var DIZZY_MS = 3000;        // cuánto dura el mareo
+  var TAP_WINDOW_MS = 2000;   // la ventana en la que cuentan los toques para marearlo
+  var TAPS_TO_DIZZY = 5;
+  var touchMood = '';         // el ánimo que puso un toque: '' (ninguno), 'idle' (lo despertó), 'heart' o 'dizzy'
+  var touchTimer = 0;
+  var touchTaps = [];         // cuándo fue (performance.now) cada toque que reaccionó, de la ventana en curso
+
+  function shownMood() { return touchMood || curMood; }
+  /* Lo que se ve de Buddy: el cuerpo (SVG por data-mood), el resplandor, el acento y el GIF del pack. Se vuelve a llamar con cada
+     estado nuevo y cuando termina un ánimo de toque; no toca ningún texto. `data-real` es el ánimo del servidor: tiñe lo que cuenta
+     algo (la barra, la placa, las pantallas), que no sigue al toque. */
+  function paintMood() {
+    var m = shownMood();
+    setAttr(document.body, 'data-mood', m);
+    setAttr(document.body, 'data-real', curMood);
+    land(m);
+    showGif(m);
+  }
+  function clearTouch() { clearTimeout(touchTimer); touchTimer = 0; touchMood = ''; touchTaps = []; }
+  function setTouch(mood, ms) {
+    clearTimeout(touchTimer);
+    touchMood = mood;
+    touchTimer = setTimeout(function () { clearTouch(); paintMood(); }, ms);
+    paintMood();
+  }
+  /* cada toque que Buddy acepta lo aprieta un poco, para que se note aunque el ánimo ya fuera ese. Solo la figura que está a la vista
+     (la otra está oculta: con la clase puesta repetiría el apretón cuando volviera a mostrarse), y la clase se va cuando termina SU
+     animación (animationend de ella misma, no de lo que se anima adentro) o se cancela porque la figura se ocultó a la mitad. */
+  function pokeBuddy() {
+    var el = $(document.body.classList.contains('pack') ? 'gif' : 'pet-svg');
+    el.classList.remove('poke');
+    el.getBoundingClientRect();   // el reflujo reinicia la animación aunque el toque anterior no haya terminado
+    el.classList.add('poke');
+  }
+  ['pet-svg', 'gif'].forEach(function (id) {
+    var el = $(id), done = function (e) { if (e.target === el && e.animationName === 'poke') el.classList.remove('poke'); };
+    el.addEventListener('animationend', done);
+    el.addEventListener('animationcancel', done);
+  });
+  function touchBuddy(e) {
+    var screen = document.body.getAttribute('data-screen');
+    if (screen === 'ask' || screen === 'boot') return;   // con un permiso pendiente la zona no responde ni suena: solo se queda con el toque
+    if (touchMood === 'dizzy' || touchMood === 'attention' || curMood === 'attention') { echo(e); return; }   // mareado no cuenta ningún toque y te necesita (el del servidor o el de un aviso) no es para jugar, pero el dedo se siente
+    var now = performance.now();
+    touchTaps = touchTaps.filter(function (t) { return now - t <= TAP_WINDOW_MS; });
+    touchTaps.push(now);
+    pokeBuddy();
+    if (touchTaps.length >= TAPS_TO_DIZZY) { touchTaps = []; setTouch('dizzy', DIZZY_MS); return; }
+    var waking = !touchMood && curMood === 'sleep';
+    setTouch(waking ? 'idle' : 'heart', waking ? WAKE_MS : HEART_MS);
+  }
+  $('petzone').addEventListener('click', touchBuddy);
+
+  /* Un toque en una parte muerta de la pantalla (ni un botón, ni una fila, ni Buddy, ni un texto que se desplaza) deja un eco de
+     140ms: el dedo sintió algo. Un solo círculo que se reutiliza; las coordenadas se sacan del rectángulo del escenario, que ya
+     viene escalado, así que valen con cualquier escala. */
+  function echo(e) {
+    var r = $('stage').getBoundingClientRect(), k = r.width / 800, p = $('ping');
+    if (!(k > 0)) return;
+    p.style.setProperty('--px', ((e.clientX - r.left) / k - 28).toFixed(1) + 'px');
+    p.style.setProperty('--py', ((e.clientY - r.top) / k - 28).toFixed(1) + 'px');
+    p.classList.remove('on');
+    p.getBoundingClientRect();
+    p.classList.add('on');
+  }
+  /* La zona de Buddy no está en la lista: cuando Buddy juega responde él, y cuando la zona rechaza el toque (attention, mareado) el
+     eco lo da touchBuddy; bajo un permiso se queda callada. */
+  var LIVE_TOUCH = 'button, #petzone, #feed-list, #tv-said, .hint, .reason';
+  $('stage').addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest(LIVE_TOUCH)) return;
+    echo(e);
+  });
+
+  /* ---------------- la línea con el daemon ---------------- */
+  var es = null, lastNews = 0, offlineTimer = 0;
+
+  /* Un daemon reiniciado tiene otro token: la página vieja ya no podría contestar. Se recarga sola. */
+  function sameBoot(v) {
+    if (bootId === null) { bootId = v.boot; return true; }
+    if (v.boot !== bootId) { location.reload(); return false; }
+    return true;
+  }
+
+  function setOffline(on) {
+    clearTimeout(offlineTimer);
+    if (!on) { $('offline').className = ''; return; }
+    offlineTimer = setTimeout(function () { $('offline').className = 'on'; }, 1500);
+  }
+
+  function connect() {
+    if (es) { try { es.close(); } catch (e) { /* nada */ } }
+    es = new EventSource('/events');
+    es.addEventListener('state', function (e) {
+      lastNews = Date.now();
+      setOffline(false);
+      try { var v = JSON.parse(e.data); if (sameBoot(v)) { view = v; render(); } } catch (err) { console.error(err); }
+    });
+    es.addEventListener('ping', function () { lastNews = Date.now(); setOffline(false); });
+    es.onerror = function () {
+      setOffline(true);
+      if (es.readyState === 2) { es.close(); setTimeout(connect, 1500); }
+    };
+  }
+
+  function poll() {
+    fetch('/state', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json();
+    }).then(function (v) {
+      lastNews = Date.now(); setOffline(false);
+      if (sameBoot(v)) { view = v; render(); }
+    }).catch(function () { setOffline(true); }).then(function () { setTimeout(poll, Math.max(250, POLL)); });
+  }
+
+  setInterval(function () {
+    if (DEMO || POLL) return;
+    if (lastNews && Date.now() - lastNews > STALE_MS) { lastNews = Date.now(); setOffline(true); connect(); }
+  }, 5000);
+
+  /* el reloj y la edad del pedido avanzan solos */
+  setInterval(function () {
+    if (!view) return;
+    if (!view.clock) setText($('clock'), localClock());
+    if (document.body.getAttribute('data-screen') === 'ask') paintAsk();
+    if (openId) paintDetail(stableOrder(shownTasks(view).tasks));   // la edad del hilo abierto sigue corriendo sin otro latido
+    if (openNoteId) paintNotice(noticesOf(view));                   // y la del aviso
+  }, 1000);
+
+  /* un pack trae varias variantes de idle: se turnan, sin apuro, para que no se repita el mismo clip */
+  setInterval(function () {
+    gifIdx += 1;
+    if (view && view.character) showGif(shownMood());
+  }, 12000);
+
+  /* ---------------- modo noche ----------------
+     De noche el daemon baja la luz (view.dim). Con el panel de verdad (view.backlight) la baja él y #dim solo atrapa el toque; sin
+     panel, #dim además oscurece. Un toque despierta la pantalla: lo consume #dim (en click, no en pointerdown, así el mismo gesto
+     no llega también a lo que hay debajo), así que no abre una fila, no aprieta Volver, no mueve a Buddy ni deja eco. Avisa al daemon
+     (POST /wake, sin esperar respuesta) y despierta también acá por 30 s: si el aviso se pierde la pantalla igual se ve, con la luz de
+     siempre. Ya despierta, #dim sigue atajando toques 350 ms (un doble toque no cae sobre un control); si un dedo apoya en #dim dentro
+     de esos 350 ms, sigue atajando hasta 600 ms después de que apoyó, porque el click se le asigna a un elemento recién cuando el dedo
+     se levanta y un toque que empezó adentro y terminó afuera caía sobre el control de abajo. Manda el daemon: view.dim falso
+     apaga el despertar de acá, y un permiso (ask) nunca está tapado ni oscuro, diga lo que diga la bandera; sus 600 ms de armado son
+     los de siempre. Hay un solo temporizador, siempre apagado antes de armar otro. */
+  var NIGHT_AWAKE_MS = 30000;   // el daemon cuenta los mismos 30 s (AWAKE_S)
+  var NIGHT_GUARD_MS = 350;     // lo que #dim sigue atajando toques después de despertar
+  var NIGHT_PRESS_MS = 600;     // y lo que sigue atajando tras un dedo que apoyó en él dentro de esa guarda: un toque entero
+  var nightAwakeUntil = 0;      // performance.now hasta el que un toque de acá la mantiene despierta (0: ninguno)
+  var nightGuardUntil = 0;      // performance.now hasta el que #dim sigue atajando
+  var nightPressEdge = 0;       // hasta cuándo un dedo que apoya en #dim alarga la guarda: el fin de la primera, sin alargar (0: ninguno)
+  var nightDark = false;        // lo último que se pintó: oscura, o sea que el próximo toque despierta
+  var nightTimer = 0;
+  var NIGHT_KEEP_MS = 5000;     // cada cuánto, como mucho, un toque sobre la pantalla despierta le avisa al daemon que sigue en uso
+  var nightKeepAt = -NIGHT_KEEP_MS;
+
+  function isNight() { return !!view && view.dim === true; }
+  function isAsking() { return document.body.getAttribute('data-screen') === 'ask'; }
+  function dimNow(now) { return isNight() && !isAsking() && now >= nightAwakeUntil; }
+
+  function paintDim() {
+    var el = $('dim'), now = performance.now();
+    if (!isNight()) nightAwakeUntil = 0;   // el daemon dice que está despierta: se acaba el despertar de acá
+    var asking = isAsking(), dark = dimNow(now);
+    if (dark || asking) nightGuardUntil = nightPressEdge = 0;
+    else if (nightDark) {   // acaba de despertar, de un toque o porque lo dijo el daemon
+      nightGuardUntil = now + NIGHT_GUARD_MS;
+      nightPressEdge = nightGuardUntil + 20;   // (los 20 ms son los que #dim sigue puesto hasta que el temporizador lo apaga)
+    }
+    nightDark = dark;
+    el.classList.toggle('on', dark || now < nightGuardUntil);
+    el.classList.toggle('dark', dark && !(view && view.backlight === true));
+    clearTimeout(nightTimer);
+    nightTimer = 0;
+    /* el próximo cambio que nadie va a avisar: termina la guarda, o termina el despertar de acá mientras el daemon sigue diciendo noche */
+    var next = now < nightGuardUntil ? nightGuardUntil : 0;
+    if (isNight() && !asking && !dark && nightAwakeUntil > now && (!next || nightAwakeUntil < next)) next = nightAwakeUntil;
+    if (next) nightTimer = setTimeout(paintDim, next - now + 20);
+  }
+
+  /* cada vista previa parte de cero: un despertar de la anterior no se hereda */
+  function nightReset() { clearTimeout(nightTimer); nightTimer = 0; nightKeepAt = -NIGHT_KEEP_MS; nightAwakeUntil = 0; nightGuardUntil = 0; nightPressEdge = 0; nightDark = false; }
+
+  function sendWake() {
+    if (DEMO) return;   // la vista previa no habla con nadie
+    try {
+      fetch('/wake', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Buddy-Token': TOKEN }, body: '{}' })
+        .catch(function () { /* sin respuesta: igual queda despierta acá */ });
+    } catch (err) { /* nada: el aviso es de mejor esfuerzo */ }
+  }
+
+  $('dim').addEventListener('click', function (e) {
+    e.stopPropagation();   // el toque es de #dim: ni el eco del escenario ni nada más lo recibe
+    var now = performance.now();
+    if (!dimNow(now)) return;   // ya despierta (la guarda): el toque se traga y no hace nada
+    nightAwakeUntil = now + NIGHT_AWAKE_MS;
+    sendWake();
+    paintDim();
+  });
+
+  /* un dedo que apoya en #dim dentro de la guarda alarga la guarda hasta que ese toque termine. No despierta nada (eso es del click) y
+     solo vale dentro de la primera guarda: quien toca y toca de impaciencia no queda atajado más de un segundo en total. */
+  $('dim').addEventListener('pointerdown', function () {
+    var now = performance.now();
+    if (now >= nightPressEdge || dimNow(now)) return;
+    nightGuardUntil = Math.max(nightGuardUntil, now + NIGHT_PRESS_MS);
+    paintDim();
+  });
+
+  /* de noche y despierta, cualquier toque alarga el despertar del daemon: sin esto se apagaba a los 30 s del primer toque aunque siguieras
+     leyendo un hilo. Solo avisa (la misma POST /wake, a lo sumo una cada 5 s) y nunca con la pantalla oscura (ese toque es del click de #dim)
+     ni con un permiso en pantalla (ahí el daemon ya la mantiene despierta). */
+  document.addEventListener('pointerdown', function () {
+    var now = performance.now();
+    if (!view || view.night !== true || isAsking() || dimNow(now) || now - nightKeepAt < NIGHT_KEEP_MS) return;
+    nightKeepAt = now;
+    sendWake();
+  }, { capture: true, passive: true });
+
+  /* ---------------- vista previa sin buddy: ?demo=cycle | ?demo=<nombre> ----------------
+     Los textos de ejemplo van en los dos idiomas (DX) y son inventados: nada de clientes, gente ni máquinas de verdad. La vista previa
+     habla español salvo que pida &lang=en. */
+  var DEMO_LANG = DEMO ? pickLang(query.get('lang')) : 'es';
+  var DX = {
+    es: {
+      owner: 'Ana', msg: 'Editando app.py', busyMsg: 'Corriendo 2 tareas', doneMsg: 'Tarea terminada',
+      notReady: 'el adaptador hci0 desapareció (¿se desenchufó?)',
+      longTail: '# limpia los archivos temporales de la compilación anterior',
+      catalogTitle: 'Catálogo de la tienda web', catalogSaid: 'Cambié el selector de categoría a un menú con búsqueda. Sigo con los estilos de la tarjeta.',
+      b1Title: 'Hilos en la pantalla del Buddy', b2Title: 'Probar la pantalla con Chromium',
+      b2Said: 'Las doce pantallas se ven bien. Falta mirar la de ocho hilos con el dedo, en el Pi.',
+      backupTitle: 'Respaldos del servidor',
+      updateTitle: 'Actualizar las dependencias del sitio', schemaTitle: 'Esquema de la base de datos', groupInfra: 'Infra', groupPlatform: 'Plataforma',
+      schemaSaid: 'Dejé los tipos de usuario, pedido y producto. Falta decidir si el historial se guarda en orden.',
+      siteSaid: 'Listo el sitio: las tres páginas ya cargan y el menú se ve bien en el celular. Falta el correo de contacto, ¿querés que lo deje para mañana?',
+      longSaid: 'Terminé la migración del correo y verifiqué los tres registros DNS que faltaban: MX, SPF y DKIM ya resuelven bien desde fuera. Dejé el DMARC en modo de prueba por dos semanas para no perder correo legítimo. Faltan los buzones de Ana y de Luis. ¿Querés que pase la factura a colones?',
+      mailTitle: 'Migrar el correo de acme.example a un proveedor nuevo', groupLong: 'Acme Studio - operaciones y soporte 24/7',
+      dmarcTitle: 'Revisar el DMARC y los reportes de los primeros días', invoiceTitle: 'Pasar la factura de Luis a colones',
+      runSaid: 'Compilé la tienda sin errores. Sigo con las pruebas del pago.',
+      noteDoneTitle: 'La tanda terminó', noteDoneBody: 'Las cuatro corridas de la noche pasaron sin errores.\nEl resumen quedó en la bitácora.',
+      noteMeetTitle: 'Reunión con Ana en 10 min', noteMailTitle: 'Ana escribió', noteMailBody: 'Pregunta si el logo ya está listo para imprimir.',
+      cliHint: 'git push origin main\nen ~/Projects/web-tienda', lintHint: 'npm run lint\nen ~/Projects/web-tienda', lintRule: 'Bash(npm run *) en este proyecto'
+    },
+    en: {
+      owner: 'Ana', msg: 'Editing app.py', busyMsg: 'Running 2 tasks', doneMsg: 'Task finished',
+      notReady: 'adapter hci0 disappeared (was it unplugged?)',
+      longTail: '# remove the temporary files from the previous build',
+      catalogTitle: 'Web shop catalog', catalogSaid: 'I changed the category picker to a searchable menu. I am still working on the card styles.',
+      b1Title: 'Threads on the Buddy screen', b2Title: 'Try the screen with Chromium',
+      b2Said: 'All twelve screens look good. Still need to check the eight-thread one with a finger, on the Pi.',
+      backupTitle: 'Server backups',
+      updateTitle: 'Update the site dependencies', schemaTitle: 'Database schema', groupInfra: 'Infra', groupPlatform: 'Platform',
+      schemaSaid: 'I left the user, order and product types in place. Still to decide: whether the history is kept in order.',
+      siteSaid: 'The site is ready: all three pages load and the menu looks good on a phone. The contact email is missing; should I leave it for tomorrow?',
+      longSaid: 'I finished moving the email over and checked the three DNS records that were missing: MX, SPF and DKIM now resolve fine from outside. I left DMARC in test mode for two weeks so no legitimate mail is lost. The mailboxes for Ana and Luis are still missing. Should I convert the invoice to colones?',
+      mailTitle: 'Move the acme.example email to a new provider', groupLong: 'Acme Studio - operations and support 24/7',
+      dmarcTitle: 'Check DMARC and the first days of reports', invoiceTitle: 'Convert the invoice for Luis to colones',
+      runSaid: 'The shop built with no errors. I am moving on to the payment tests.',
+      noteDoneTitle: 'The batch finished', noteDoneBody: 'All four overnight runs passed with no errors.\nThe summary is in the log.',
+      noteMeetTitle: 'Meeting with Ana in 10 min', noteMailTitle: 'Ana wrote', noteMailBody: 'She asks whether the logo is ready to print.',
+      cliHint: 'git push origin main\nin ~/Projects/web-tienda', lintHint: 'npm run lint\nin ~/Projects/web-tienda', lintRule: 'Bash(npm run *) in this project'
+    }
+  }[DEMO_LANG];
+  var BASE = {
+    v: 1, lang: DEMO_LANG,
+    ble: { ready: true, name: 'Claude-8652', reason: '', secure: true },
+    linked: true, pairing: null, mood: 'idle', night: false, dim: false, backlight: false,
+    pet: { name: 'Buddy', owner: DX.owner, level: 3, xp: 0.42, approvals: 17, denials: 2 },
+    sessions: {
+      total: 3, running: 1, waiting: 0, msg: DX.msg,
+      entries: ['10:42 Read models.py', '10:41 Bash pytest -q', '10:39 Edit app.py', '10:36 Grep user'],
+      tokens_today: 48230
+    },
+    approvals: [], notices: [], clock: '10:42'
+  };
+  function mk(o) {
+    var v = JSON.parse(JSON.stringify(BASE));
+    Object.keys(o).forEach(function (k) {
+      if (o[k] && typeof o[k] === 'object' && !Array.isArray(o[k]) && v[k] && typeof v[k] === 'object' && !Array.isArray(v[k])) {
+        Object.keys(o[k]).forEach(function (j) { v[k][j] = o[k][j]; });
+      } else { v[k] = o[k]; }
+    });
+    return v;
+  }
+  var LONG = 'cd /home/ana/proyectos/tienda && git stash && git checkout main && git pull --rebase origin main && npm ci && npm run build -- --mode production && rsync -avz --delete ./dist/ deploy@servidor.ejemplo.com:/var/www/tienda/ && ssh deploy@servidor.ejemplo.com "sudo systemctl restart tienda && sudo systemctl status tienda --no-pager"\n\n' + DX.longTail + '\nrm -rf ./.cache ./tmp/builds/*';
+  /* hilos de ejemplo: titulados, en tres grupos (uno es la terminal), una subtarea y una tarea terminada que espera respuesta */
+  var THREADS = [
+    { id: 'f1', project: '~', title: DX.catalogTitle, group: 'Acme Studio', tool: 'Edit', what: 'src/Catalogo.tsx',
+      state: 'working', age: 3, said: DX.catalogSaid },
+    { id: 'b1', project: 'claude-buddy', title: DX.b1Title, group: 'Buddy', tool: 'Bash', what: 'pytest -q',
+      state: 'working', age: 6 },
+    { id: 't1', project: 'api-pagos', tool: 'Bash', what: 'git pull', state: 'working', age: 12 },
+    { id: 'b2', project: 'claude-buddy', title: DX.b2Title, group: 'Buddy', parent: 'b1', tool: 'Read', what: 'ui/index.html',
+      state: 'idle', age: 31, said: DX.b2Said },
+    { id: 'f2', project: '~', title: DX.backupTitle, group: 'Acme Studio', tool: 'Bash', what: 'aws s3 sync ./respaldos s3://acme-respaldos',
+      state: 'idle', age: 74 }
+  ];
+  /* avisos de Hermes de ejemplo, uno de cada clase: lo que dejaría por la mañana, antes de que el Mac despierte */
+  var NOTICES = [
+    { id: 'n-tanda', title: DX.noteDoneTitle, body: DX.noteDoneBody, kind: 'ok', source: 'hermes', age: 42, rev: 1 },
+    { id: 'n-reunion', title: DX.noteMeetTitle, kind: 'warn', source: 'hermes', age: 95, rev: 1 },
+    { id: 'n-correo', title: DX.noteMailTitle, body: DX.noteMailBody, kind: 'info', source: 'hermes', age: 180, rev: 2 }
+  ];
+  var NIGHT_TASKS = [THREADS[1], THREADS[3], THREADS[4]];   // de noche casi todo terminó: uno trabaja, dos esperan
+  var THREADS8 = [THREADS[0], THREADS[1], THREADS[2],
+    { id: 'h1', project: '~', title: DX.updateTitle, group: DX.groupInfra, tool: 'Bash', what: 'npm update', state: 'working', age: 20 },
+    THREADS[3], THREADS[4],
+    { id: 'm1', project: 'api-pagos', title: DX.schemaTitle, group: DX.groupPlatform, tool: 'Edit', what: 'schema.ts', state: 'idle', age: 90,
+      said: DX.schemaSaid },
+    { id: 't2', project: 'sitio-web', tool: 'Edit', what: 'index.html', state: 'idle', age: 120 }
+  ];
+  /* corridas: lo que el censo de la Mac ve (un claude -p, un trabajo de la lista del dueño) y la pantalla pone bajo "Corridas", al lado de
+     los hilos. Una fila por estado: con su sesión hablando y más de una hora, callada con un nombre largo, hablando hace poco, sin
+     transcript que mirar y un trabajo de diez horas. El servidor manda title y project iguales al nombre, source, elapsed, idle si se
+     sabe, y age = idle (0 sin idle). Con 7 vivas y 4 hilos, caben 5 y 3: el resto es `tasks_more`. */
+  function RUN(id, name, elapsed, o) {
+    var t = { id: id, project: name, title: name, group: 'Corridas', tool: '', what: '', state: 'working', age: 0, source: 'census', elapsed: elapsed };
+    Object.keys(o || {}).forEach(function (k) { t[k] = o[k]; });
+    if (typeof t.idle === 'number') t.age = t.idle;
+    return t;
+  }
+  var RUNS = [
+    RUN('run-tienda-web', 'tienda-web', 3643, { idle: 8, tool: 'Bash', what: 'npm run build', said: DX.runSaid }),
+    RUN('run-api-pagos-sandbox-regional', 'api-pagos-sandbox-regional', 1730, { idle: 540 }),
+    RUN('run-docs-sitio', 'docs-sitio', 95, { idle: 31 }),
+    RUN('run-migracion-correo', 'migracion-correo', 612),
+    RUN('job-respaldo-nocturno', 'respaldo-nocturno', 36000)
+  ];
+  var RUNS_VIEW = {
+    mood: 'busy', sessions: { total: 9, running: 9 }, working_total: 9, tasks_total: 11, census_total: 7, tasks_more: 3,
+    tasks: RUNS.concat([THREADS[1], THREADS[2], THREADS[3]].map(function (h) { return Object.assign({ source: 'hook' }, h); }))
+  };
+  /* un pack de ejemplo (colores del manifest de bufo y un rev como el que manda el daemon; sin imágenes: la página no las pide a nadie en la vista previa) */
+  var PACK = { name: 'bufo', rev: '9c1f0e7a42b3', colors: { bg: '#000000', text: '#ffffff', textDim: '#bdbdbd', body: '#7fd27f' }, states: {} };
+  var DEMOS = {
+    boot: null,
+    starting: mk({ ble: { ready: false, reason: 'starting' }, linked: false, mood: 'sleep' }),
+    notready: mk({ ble: { ready: false, reason: DX.notReady }, linked: false, mood: 'sleep' }),
+    waiting: mk({ linked: false, mood: 'sleep' }),
+    pairing: mk({ linked: false, mood: 'sleep', pairing: { code: '482197', entered: 0 } }),
+    'pairing-half': mk({ linked: false, mood: 'sleep', pairing: { code: '048219', entered: 3 } }),
+    idle: mk({ sessions: { total: 4, running: 2 }, tasks: [
+      { id: 'a1', project: 'web-tienda', tool: 'Edit', what: 'src/Catalogo.tsx', state: 'working', age: 12,
+        said: DX.catalogSaid },
+      { id: 'b2', project: 'claude-buddy', tool: 'Bash', what: 'pytest -q', state: 'working', age: 31 },
+      { id: 'c3', project: 'sitio-web', tool: 'Edit', what: 'index.html', state: 'idle', age: 47,
+        said: DX.siteSaid },
+      { id: 'd4', project: 'api-pagos', tool: 'Read', what: 'docs/runbooks/backup.md', state: 'idle', age: 68 }
+    ] }),
+    tasks1: mk({ mood: 'busy', sessions: { total: 1, running: 1 }, tasks: [
+      { id: 'b2', project: 'claude-buddy', tool: 'Bash', what: 'pytest -q', state: 'working', age: 9 }
+    ] }),
+    tasks6: mk({ mood: 'busy', sessions: { total: 6, running: 3 }, tasks: [
+      { id: 'a1', project: 'web-tienda', tool: 'Edit', what: 'src/Catalogo.tsx', state: 'working', age: 12 },
+      { id: 'b2', project: 'claude-buddy', tool: 'Bash', what: 'pytest -q', state: 'working', age: 31 },
+      { id: 'e5', project: 'web-tienda-catalogo-clientes', tool: 'Grep', what: 'journal', state: 'working', age: 33 },
+      { id: 'c3', project: 'sitio-web', tool: 'Edit', what: 'index.html', state: 'idle', age: 47,
+        said: DX.siteSaid },
+      { id: 'd4', project: 'api-pagos', tool: 'Read', what: 'docs/runbooks/backup.md', state: 'idle', age: 68 },
+      { id: 'f6', project: 'notas-infra', tool: '', what: '', state: 'idle', age: 80 }
+    ] }),
+    longsaid: mk({ mood: 'celebrate', sessions: { total: 1, running: 0 }, tasks: [
+      { id: 'c3', project: 'sitio-web', tool: 'Edit', what: 'index.html', state: 'idle', age: 47,
+        said: DX.longSaid }
+    ] }),
+    'idle-pack': mk({ mood: 'idle', sessions: { total: 4, running: 2 }, character: PACK, tasks: [
+      { id: 'a1', project: 'web-tienda', tool: 'Edit', what: 'src/Catalogo.tsx', state: 'working', age: 12 },
+      { id: 'b2', project: 'claude-buddy', tool: 'Bash', what: 'pytest -q', state: 'working', age: 31 },
+      { id: 'c3', project: 'sitio-web', tool: 'Edit', what: 'index.html', state: 'idle', age: 47,
+        said: DX.siteSaid },
+      { id: 'd4', project: 'api-pagos', tool: 'Read', what: 'docs/runbooks/backup.md', state: 'idle', age: 68 }
+    ] }),
+    /* hilos: conversaciones con su título y su grupo (como la barra lateral de Claude desktop), una subtarea que cuelga de su padre y una terminal sin grupo */
+    threads: mk({ mood: 'busy', sessions: { total: 5, running: 3 }, tasks: THREADS }),
+    'threads-long': mk({ mood: 'busy', sessions: { total: 3, running: 2 }, tasks: [
+      { id: 'l1', project: '~', title: DX.mailTitle, group: DX.groupLong,
+        tool: 'Bash', what: 'dig +short MX acme.example', state: 'working', age: 4,
+        said: DX.longSaid },
+      { id: 'l2', project: '~', title: DX.dmarcTitle, group: DX.groupLong,
+        parent: 'l1', tool: 'Read', what: 'dmarc/reporte-2026-10-17.xml', state: 'working', age: 11 },
+      { id: 'l3', project: '~', title: DX.invoiceTitle, group: DX.groupLong,
+        tool: 'Edit', what: 'factura.md', state: 'idle', age: 52 }
+    ] }),
+    threads8: mk({ mood: 'busy', sessions: { total: 9, running: 4 }, tasks: THREADS8 }),
+    'threads-pack': mk({ mood: 'busy', sessions: { total: 5, running: 3 }, character: PACK, tasks: THREADS }),
+    runs: mk(RUNS_VIEW),
+    runs1: mk({ mood: 'busy', sessions: { total: 1, running: 1 }, working_total: 1, tasks_total: 1, census_total: 1, tasks_more: 0, tasks: [RUNS[0]] }),
+    'runs-pack': mk(Object.assign({ character: PACK }, RUNS_VIEW)),
+    /* avisos de Hermes: arriba de los hilos, o solos (sin hilos el titular cuenta los avisos); &open=<id o número de fila> abre el detalle de un aviso */
+    notices: mk({ mood: 'busy', sessions: { total: 5, running: 3 }, tasks: THREADS, notices: [NOTICES[1], NOTICES[2]] }),
+    'notices-pack': mk({ mood: 'busy', sessions: { total: 5, running: 3 }, character: PACK, tasks: THREADS, notices: NOTICES }),
+    'notices-only': mk({ mood: 'idle', sessions: { total: 0, running: 0 }, notices: NOTICES }),
+    busy: mk({ mood: 'busy', sessions: { running: 2, msg: DX.busyMsg } }),
+    attention: mk({ mood: 'attention', sessions: { waiting: 1, running: 2, msg: 'approve: Bash' } }),
+    celebrate: mk({ mood: 'celebrate', sessions: { msg: DX.doneMsg } }),
+    dizzy: mk({ mood: 'dizzy' }),
+    heart: mk({ mood: 'heart', pet: { approvals: 18 } }),
+    asleep: mk({ mood: 'sleep', sessions: { total: 46, running: 0, msg: '(no messages)', entries: ['(no messages)'] } }),
+    approval: mk({ mood: 'attention', sessions: { waiting: 1 }, approvals: [{ key: 'claude:req_01', tool: 'Bash', hint: 'git push origin main --force', source: 'claude' }] }),
+    'approval-long': mk({ mood: 'attention', sessions: { waiting: 1 }, approvals: [{ key: 'claude:req_02', tool: 'Bash', hint: LONG, source: 'claude' }] }),
+    'approval-queue': mk({ mood: 'attention', sessions: { waiting: 2 }, approvals: [
+      { key: 'claude:req_03', tool: 'Edit', hint: '/home/ana/web-tienda/src/app.py', source: 'claude' },
+      { key: 'claude:req_04', tool: 'Bash', hint: 'rm -rf node_modules', source: 'claude' }] }),
+    'approval-hermes': mk({ mood: 'attention', approvals: [{ key: 'hermes:h_01', tool: 'terminal', hint: 'sudo systemctl restart nginx', source: 'hermes' }] }),
+    'approval-cli': mk({ mood: 'attention', approvals: [{ key: 'cli:cli-01', tool: 'Bash', hint: DX.cliHint, source: 'cli' }] }),
+    'approval-cli-always': mk({ mood: 'attention', approvals: [{ key: 'cli:cli-02', tool: 'Bash', hint: DX.lintHint, source: 'cli', always: DX.lintRule }] }),
+    /* modo noche: el daemon manda dim (es de noche y nadie la despertó) y backlight (controla el panel de verdad). Con backlight la luz la
+       baja el daemon y la página no oscurece nada; sin backlight oscurece #dim. En night-ask la bandera dim sigue en true a propósito
+       (el daemon manda false con un permiso pendiente) y backlight en false: si la página oscureciera un permiso, se vería. Tocar la
+       pantalla oscura la despierta 30 s, sin hablar con nadie. */
+    night: mk({ night: true, dim: true, backlight: true, mood: 'idle', sessions: { total: 3, running: 1 }, tasks: NIGHT_TASKS }),
+    'night-overlay': mk({ night: true, dim: true, backlight: false, mood: 'idle', sessions: { total: 3, running: 1 }, tasks: NIGHT_TASKS }),
+    'night-ask': mk({ night: true, dim: true, backlight: false, mood: 'attention', sessions: { waiting: 1 },
+      approvals: [{ key: 'claude:req_05', tool: 'Bash', hint: 'systemctl --user restart claude-buddy', source: 'claude' }] })
+  };
+  var demoNames = Object.keys(DEMOS);
+  var demoIdx = 0, demoTimer = 0;
+
+  function demoShow(name) {
+    $('demo-tag').textContent = query.get('tag') === '0' ? '' : 'demo: ' + name;
+    view = DEMOS[name];
+    seen = {}; sending = {}; curKey = ''; holdUntil = 0;
+    closeTask(); clearTouch(); nightReset(); rank.clear(); grank.clear(); rankSeq = 0; grankSeq = 0;   // cada vista previa parte de cero: el orden de llegada es el suyo
+    noticeReset();
+    render();
+  }
+  function demoNext(manual) {
+    if (query.get('demo') !== 'cycle') {
+      if (manual) { demoShow(DEMOS['idle'] ? 'idle' : demoNames[0]); }
+      return;
+    }
+    demoIdx = (demoIdx + 1) % demoNames.length;
+    demoShow(demoNames[demoIdx]);
+  }
+
+  /* Mejor esfuerzo: pedirle al sistema que no apague la pantalla mientras el kiosco está abierto.
+     Si el Pi se apaga igual, hay que quitar el apagado de pantalla en el sistema (ver README). */
+  if (document.body.classList.contains('kiosk') && navigator.wakeLock) {
+    var wakeLock = null;
+    var wake = function () {
+      navigator.wakeLock.request('screen').then(function (l) {
+        wakeLock = l;
+        l.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () { /* no se pudo: no pasa nada */ });
+    };
+    wake();
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && !wakeLock) wake();
+    });
+  }
+
+  if (DEMO) {
+    if (DEMO === 'cycle') {
+      demoShow(demoNames[0]);
+      demoTimer = setInterval(function () { demoNext(false); }, 4500);
+    } else if (Object.prototype.hasOwnProperty.call(DEMOS, DEMO)) {
+      demoShow(DEMO);
+      /* solo en la vista previa: ?open=<id o número de fila> abre el detalle de ese hilo, ?scroll=<px> corre la lista */
+      var o = query.get('open'), sc = query.get('scroll');
+      if (o !== null && view && (view.tasks || view.notices)) {
+        /* los avisos van primero, como en la lista: el número de fila cuenta los avisos y después los hilos */
+        var notes = orderNotes(noticesOf(view)), shown = stableOrder(shownTasks(view).tasks);
+        var hitNote = notes.filter(function (n) { return n.id === o; })[0] || (/^\d+$/.test(o) ? notes[Number(o)] : null);
+        var hit = hitNote ? null : shown.filter(function (t) { return t.id === o; })[0] || shown[Number(o) - (/^\d+$/.test(o) ? notes.length : 0)];
+        if (hitNote) openNotice(hitNote.id);
+        else if (hit) openTask(hit.id);
+      }
+      if (sc !== null) $('feed-list').scrollTop = Number(sc) || 0;
+    } else {
+      DEMO = null; connect();
+    }
+  } else {
+    render();
+    if (POLL) poll(); else connect();
+  }
+})();
+</script>
+</body>
+</html>

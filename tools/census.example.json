@@ -1,0 +1,29 @@
+{
+  "_about": [
+    "Copy this file to ~/.config/claude-buddy/census.json (chmod 600) and keep only what you need.",
+    "Without that file the census lists the headless Claude runs (claude -p) and nothing else.",
+    "Keys that start with _ and keys it does not know are ignored.",
+    "jobs: each match is compared with the NAME of a process's script or program (never with its arguments).",
+    "regex: true makes match a regular expression (re.search); name may use {script}, {cwd} and {prog}.",
+    "strip_prefix is cut from folder names (runs and {cwd}), so work-alpha shows as alpha.",
+    "url: http only, and only this Mac or the tailnet; insecure_url_ok lifts that. CLAUDE_BUDDY_URL wins over url."
+  ],
+  "version": 1,
+  "url": "http://buddy:8766",
+  "token_file": "~/.config/claude-buddy/hermes.token",
+  "source": "mac",
+  "interval_s": 15,
+  "group": "Corridas",
+  "max_rows": 8,
+  "min_age_s": 20,
+  "claude_runs": true,
+  "strip_prefix": ["work-"],
+  "jobs": [
+    {"match": "nightly"},
+    {"match": "^sync-.*\\.sh$", "regex": true},
+    {"match": "backup.py", "name": "copia"},
+    {"match": "opencode", "name": "{cwd}", "min_age_s": 10}
+  ],
+  "ignore": [{"match": "caffeinate"}, "tee"],
+  "insecure_url_ok": false
+}

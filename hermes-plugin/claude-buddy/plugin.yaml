@@ -1,0 +1,22 @@
+name: claude-buddy
+version: 0.1.0
+author: nombreregular
+license: MIT
+description: >
+  Dangerous-command approvals on the Claude Buddy touch screen. Registers the approval
+  transport "buddy": select it with security.approval.transport: buddy (and keep
+  transport_fallback: builtin so Hermes asks the usual way when the screen cannot answer).
+  The request shows on the Pi as "hermes · terminal"; a tap on Aprobar or Denegar is the
+  decision. Standard library only.
+provides_tools: []
+provides_hooks: []
+config_schema:
+  url:
+    type: string
+    description: "The buddy's Hermes listener, http://host:port (default http://buddy.local:8766)"
+  token_file:
+    type: string
+    description: "File with the listener's token, 0600 and yours (default ~/.hermes/claude-buddy.token)"
+  timeout:
+    type: number
+    description: "Seconds the screen gets before Hermes asks elsewhere (default 120, 5 to 3600)"

@@ -1,0 +1,13 @@
+.venv*/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.log
+# impeccable: lo transitorio (bocetos de rondas, capturas, sorteos, caché); quedan config, design.json y surfaces
+.impeccable/mocks/
+.impeccable/review/
+.impeccable/questions/
+.impeccable/hook.cache.json
+
+# impeccable (design tool state, personal notes): not part of the product
+.impeccable/
