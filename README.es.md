@@ -272,7 +272,7 @@ Todo está probado contra un BlueZ simulado (unas 2.000 pruebas; las de BlueZ ne
 
 ## Apoyar el proyecto
 
-Claude Buddy es libre y de licencia MIT. Si te sirve, podés apoyar el trabajo con el botón **Sponsor** de este repositorio o con un café en [Ko-fi](https://ko-fi.com/nombreregular). También ayuda que cuentes qué te gustaría después: un kit ya armado, disfraces nuevos para la mascota o una versión que apruebe acciones de otros agentes de IA. Abrí un issue y decilo.
+Claude Buddy es libre y de licencia MIT. Si te sirve, podés apoyar el trabajo con el botón **Sponsor** de este repositorio o con un café en [Ko-fi](https://ko-fi.com/nombreregular).
 
 ## Licencia
 
