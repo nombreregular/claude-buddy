@@ -272,7 +272,7 @@ Everything is tested against a simulated BlueZ (about 2,000 tests; the BlueZ one
 
 ## Support the project
 
-Claude Buddy is free and MIT licensed. If it is useful to you, you can sponsor the work through the **Sponsor** button of this repository. It also helps to tell us what you would like next: a ready-made kit, new pet costumes, or a version that approves actions for other AI agents. Open an issue and say so.
+Claude Buddy is free and MIT licensed. If it is useful to you, you can sponsor the work through the **Sponsor** button of this repository or with a coffee on [Ko-fi](https://ko-fi.com/nombreregular). It also helps to tell us what you would like next: a ready-made kit, new pet costumes, or a version that approves actions for other AI agents. Open an issue and say so.
 
 ## License
 
