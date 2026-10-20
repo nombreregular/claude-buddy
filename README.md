@@ -10,6 +10,8 @@ It shows up in Claude desktop as a **Hardware Buddy** over Bluetooth LE. When Cl
 
 It speaks the same protocol as the official M5StickC Plus buddy, but runs on **BlueZ and Python** instead of an ESP32.
 
+![Approving a permission request on the Claude Buddy screen with a tap](docs/img/demo.gif)
+
 ![The Buddy screen: the pet, your sessions and the live threads](docs/img/overview.png)
 
 ## What you need
