@@ -268,6 +268,10 @@ Todo está probado contra un BlueZ simulado (unas 2.000 pruebas; las de BlueZ ne
 - Funciones: [hilos y hook de contexto](docs/es/features/threads-and-context-hook.md), [censo](docs/es/features/census.md), [avisos](docs/es/features/notices.md), [modo noche](docs/es/features/night-mode.md), [closet](docs/es/features/closet.md), [Hermes](docs/es/features/hermes.md), [mascota y packs](docs/es/features/pets-and-packs.md), [idiomas](docs/es/features/i18n.md)
 - [Contribuir](docs/es/CONTRIBUTING.md)
 
+## Apoyar el proyecto
+
+Claude Buddy es libre y de licencia MIT. Si te sirve, podés apoyar el trabajo con el botón **Sponsor** de este repositorio. También ayuda que cuentes qué te gustaría después: un kit ya armado, disfraces nuevos para la mascota o una versión que apruebe acciones de otros agentes de IA. Abrí un issue y decilo.
+
 ## Licencia
 
 [MIT](LICENSE). Copyright (c) 2026 nombreregular.
